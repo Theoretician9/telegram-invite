@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Admin Panel</title>
+  <style>
+    body { font-family: sans-serif; padding: 2rem; }
+    label { display: block; margin-top: 1rem; }
+    input, textarea { width: 100%; padding: 0.5rem; }
+    button { margin-top: 1rem; padding: 0.5rem 1rem; }
+    .success { color: green; }
+  </style>
+</head>
+<body>
+  <h1>Настройки</h1>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, msg in messages %}
+        <p class="{{ category }}">{{ msg }}</p>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <form method="post">
+    <label>
+      Channel username (без @):
+      <input name="channel_username" value="{{ config.channel_username }}">
+    </label>
+    <label>
+      Failure message ({{'{{channel}}'}} заменится на имя канала):
+      <textarea name="failure_message" rows="4">{{ config.failure_message }}</textarea>
+    </label>
+    <button type="submit">Save</button>
+  </form>
+
+  <p><a href="{{ url_for('view_logs') }}">Перейти к логам</a></p>
+</body>
+</html>

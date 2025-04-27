@@ -1,0 +1,7 @@
+venv/
+logs/
+*.session
+*.session-journal
+app.log
+invite_session.session*
+__pycache__/

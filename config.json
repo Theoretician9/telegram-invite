@@ -1,0 +1,13 @@
+{
+  "channel_username": "kkkdlasdkalsdk",
+  "failure_message": "Привет! Вам был звонок по поводу подписки на телеграм канал, вы нажали цифру 1, вот ссылка:\r\nhttps://t.me/{{channel}}",
+  "accounts": [
+    {
+      "name": "InviteBot",
+      "api_id": 25966514,
+      "api_hash": "02f2aadfe27c0e407856c371c111630d",
+      "session_file": "invite_session.session",
+      "is_active": true
+    }
+  ]
+}
