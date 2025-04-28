@@ -7,18 +7,17 @@ import time
 
 from celery_app import app
 from telethon.sync import TelegramClient
-from telethon.errors import FloodWaitError
-from telethon.errors.rpcerrorlist import UserPrivacyRestrictedError, UserNotMutualContactError
+from telethon.errors import FloodWaitError, UserPrivacyRestrictedError
+from telethon.errors.rpcerrorlist import UserNotMutualContactError, UserNotParticipantError
 from telethon.tl.functions.contacts import ImportContactsRequest, DeleteContactsRequest
-from telethon.tl.functions.channels import InviteToChannelRequest
+from telethon.tl.functions.channels import InviteToChannelRequest, GetParticipantRequest
 from telethon.tl.types import InputPhoneContact
 
-# Настройка логгера
+# Логирование
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-logger.setLevel(logging.DEBUG)
 
-# Пробуем заранее импортировать низкоуровневый запрос на экспорт ссылки
+# Попытка импортировать низкоуровневый экспорт ссылки
 try:
     from telethon.tl.functions.messages import ExportChatInviteRequest
     _has_low_level_export = True
@@ -28,87 +27,88 @@ except ImportError:
 @app.task(
     bind=True,
     max_retries=3,
-    rate_limit='30/m'       # не более 30 задач invite_task в минуту
+    rate_limit='30/m'  # не более 30 приглашений в минуту
 )
 def invite_task(self, phone: str, *_):
     """
-    Фоновая задача для приглашения пользователя по номеру в канал.
-    Аргументы:
-      - phone: номер телефона (строка, +7...)
-    Прочие параметры (channel_username, invite_message, accounts) берутся из config.json.
+    1) Импорт контакта
+    2) Приглашение в канал + проверка членства
+    3) При ошибках (privacy / no mutual) — отправка ссылки
+    4) Бэкофф на FloodWaitError
+    5) Удаление контакта
     """
-    # 1) Динамически читаем конфиг
+    # 1) Загружаем конфиг
     with open('config.json', 'r', encoding='utf-8') as f:
         cfg = json.load(f)
 
-    channel_username = cfg['channel_username']
-    invite_message   = cfg['failure_message'].replace('{{channel}}', channel_username)
-    accounts         = [a for a in cfg.get('accounts', []) if a.get('is_active')]
-
+    channel = cfg['channel_username']
+    fail_msg = cfg['failure_message'].replace('{{channel}}', channel)
+    accounts = [a for a in cfg.get('accounts', []) if a.get('is_active')]
     if not accounts:
-        raise RuntimeError('Нет активных аккаунтов в config.json')
+        raise RuntimeError("Нет активных аккаунтов в config.json")
 
-    # Случайно выбираем аккаунт
+    # Выбираем случайный аккаунт
     acct = random.choice(accounts)
-    client = TelegramClient(
-        acct['session_file'],
-        acct['api_id'],
-        acct['api_hash']
-    )
+    client = TelegramClient(acct['session_file'], acct['api_id'], acct['api_hash'])
     client.start()
-
     task_id = self.request.id
-    logger.info(f"[{task_id}] Старт invite_task: phone={phone}, channel={channel_username}, account={acct['name']}")
+    logger.info(f"[{task_id}] Запуск invite_task: phone={phone}, channel={channel}, account={acct['name']}")
 
     try:
         # 2) Импорт контакта
-        result = client(ImportContactsRequest([
-            InputPhoneContact(client_id=0, phone=phone, first_name=phone, last_name='')
+        res = client(ImportContactsRequest([
+            InputPhoneContact(0, phone, phone, '')
         ]))
-        imported = getattr(result, 'imported', [])
-        users     = getattr(result, 'users', [])
-
+        imported = getattr(res, 'imported', [])
+        users = getattr(res, 'users', [])
         logger.info(f"[{task_id}] ImportContacts: imported={len(imported)}, users={len(users)}")
-
-        # Если пользователя нет в Telegram
         if not imported and not users:
-            logger.warning(f"[{task_id}] Пользователь {phone} не в Telegram")
+            logger.warning(f"[{task_id}] Пользователь {phone} не зарегистрирован")
             return {'status': 'failed', 'reason': 'not_telegram_user'}
 
-        # Определяем user_id
         user_id = imported[0].user_id if imported else users[0].id
 
-        # 2.5) Небольшая пауза после импорта
+        # 2.5) Пауза, чтобы не флашить контакты
         time.sleep(0.5)
 
-        # 3) Приглашаем в канал с бэкоффом на FloodWaitError
+        # 3) Пробуем пригласить
         try:
-            client(InviteToChannelRequest(channel_username, [user_id]))
-            status = 'invited'
-            logger.info(f"[{task_id}] InviteToChannel: приглашение отправлено")
+            client(InviteToChannelRequest(channel, [user_id]))
+            logger.info(f"[{task_id}] InviteToChannelRequest отправлен, проверяю членство...")
+            # даём пару секунд Telegram, чтобы вступил
+            time.sleep(1.0)
+            # проверяем, действительно ли пользователь участник
+            try:
+                client(GetParticipantRequest(channel, user_id))
+                status = 'invited'
+                logger.info(f"[{task_id}] Пользователь {phone} успешно добавлен")
+            except UserNotParticipantError:
+                # не стал участником — считаем как приватность
+                raise UserPrivacyRestrictedError("User did not join after invite")
 
-        except (UserPrivacyRestrictedError, UserNotMutualContactError):
-            # Не можем пригласить напрямую → шлём ссылку
-            logger.info(f"[{task_id}] Прямое приглашение не удалось, отправляем ссылку")
+        except (UserPrivacyRestrictedError, UserNotMutualContactError) as e:
+            # приватность или не взаимный контакт
+            logger.info(f"[{task_id}] Прямой invite failed ({e}). Отправляю ссылку.")
+            # экспорт ссылки
             if _has_low_level_export:
-                link = client(ExportChatInviteRequest(channel_username)).link
+                link = client(ExportChatInviteRequest(channel)).link
             else:
-                link = client.export_chat_invite_link(channel_username)
-            client.send_message(user_id, f"{invite_message}\n{link}")
+                link = client.export_chat_invite_link(channel)
+            client.send_message(user_id, f"{fail_msg}\n{link}")
             status = 'link_sent'
 
         except FloodWaitError as e:
             wait = getattr(e, 'seconds', 60)
-            logger.warning(f"[{task_id}] FloodWaitError: жду {wait}s перед retry")
-            # планируем повтор через e.seconds+1
+            logger.warning(f"[{task_id}] FloodWaitError: жду {wait}s и retry")
+            # повторим через wait+1
             raise self.retry(countdown=wait + 1)
 
-        # 3.5) Пауза после приглашения, чтобы не флудить
+        # 3.5) После успешного invite или отправки ссылки — небольшой throttle
         time.sleep(1.0)
 
-        # 4) Удаляем контакт для чистоты адресной книги
+        # 4) Удаляем контакт
         client(DeleteContactsRequest(id=[user_id]))
-        logger.info(f"[{task_id}] Контакт удален")
+        logger.info(f"[{task_id}] Контакт удалён")
 
         return {'status': status}
 
