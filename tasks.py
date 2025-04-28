@@ -16,6 +16,7 @@ from telethon.tl.types import InputPhoneContact
 # Настройка логгера
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 # Пробуем заранее импортировать низкоуровневый запрос на экспорт ссылки
 try:
