@@ -36,14 +36,16 @@ jobs:
             pip install -r requirements.txt
 
             # 2) Деплоим nginx-конфиг
-            sudo cp deploy/nginx/telegram_invite.conf /etc/nginx/sites-available/telegram_invite
-            sudo ln -sf /etc/nginx/sites-available/telegram_invite /etc/nginx/sites-enabled/telegram_invite
+            sudo cp deploy/nginx/telegram_invite.conf \
+              /etc/nginx/sites-available/telegram_invite
+            sudo ln -sf /etc/nginx/sites-available/telegram_invite \
+              /etc/nginx/sites-enabled/telegram_invite
 
-            # 3) Перезапускаем фоновые сервисы (по отдельности!)
+            # 3) Перезапускаем фоновые сервисы по отдельности
             sudo systemctl restart telegram_inviter_celery.service
             sudo systemctl restart telegram_inviter_flask.service
 
-            # 4) Сборка фронтенда с нуля
+            # 4) Сборка фронтенда «с нуля»
             cd frontend
             rm -rf dist
             npm ci
@@ -51,3 +53,4 @@ jobs:
 
             # 5) Перезагружаем nginx, чтобы отдать новую статику
             sudo systemctl reload nginx
+
