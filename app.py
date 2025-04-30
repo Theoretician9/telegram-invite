@@ -1,6 +1,8 @@
 import os
 import json
 import logging
+import redis
+import mysql.connector
 from flask import Flask, request, jsonify, render_template, redirect, url_for, flash
 from tasks import invite_task
 
@@ -32,13 +34,12 @@ logging.basicConfig(
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET', 'change-me')
 
-# --- Health check ---
+# --- 1) Health check endpoint ---
 @app.route('/api/health', methods=['GET'])
 def health():
     return jsonify(status='ok')
 
-# --- Queue length endpoint ---
-import redis
+# --- 2) Queue length endpoint ---
 @app.route('/api/queue_length', methods=['GET'])
 def queue_length():
     broker_url = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
@@ -46,7 +47,28 @@ def queue_length():
     length = r.llen('celery')
     return jsonify(queue_length=length)
 
-# --- Admin panel ---
+# --- 3) Statistics endpoint ---
+# Возвращает количество записей в invite_logs по статусам
+@app.route('/api/stats', methods=['GET'])
+def stats():
+    # Подключение к базе MySQL/MariaDB
+    db = mysql.connector.connect(
+        host=os.getenv('DB_HOST', 'localhost'),
+        user=os.getenv('DB_USER', 'telegraminvi'),
+        password=os.getenv('DB_PASS', 'QyA9fWbh56Ln'),
+        database=os.getenv('DB_NAME', 'telegraminvi'),
+    )
+    cursor = db.cursor()
+    cursor.execute("SELECT status, COUNT(*) FROM invite_logs GROUP BY status")
+    rows = cursor.fetchall()
+    cursor.close()
+    db.close()
+
+    # Преобразуем в JSON-словарь
+    stats = { status: count for status, count in rows }
+    return jsonify(stats), 200
+
+# --- 4) Admin panel ---
 @app.route('/admin', methods=['GET', 'POST'])
 def admin_panel():
     global config
@@ -59,7 +81,7 @@ def admin_panel():
         return redirect(url_for('admin_panel'))
     return render_template('admin.html', config=config)
 
-# --- Logs viewer ---
+# --- 5) Logs viewer ---
 @app.route('/logs')
 def view_logs():
     entries = []
@@ -75,7 +97,7 @@ def view_logs():
                 entries.append((ts, level, rest))
     return render_template('logs.html', entries=entries)
 
-# --- Webhook handler ---
+# --- 6) Webhook handler ---
 @app.route('/webhook', methods=['GET', 'POST'], strict_slashes=False)
 @app.route('/webhook/', methods=['GET', 'POST'], strict_slashes=False)
 def webhook_handler():
@@ -84,7 +106,6 @@ def webhook_handler():
         f"args={request.args} data={request.get_data(as_text=True)}"
     )
 
-    # Extract phone
     phone = None
     if request.method == 'POST':
         data = request.get_json(force=True) or {}
@@ -97,16 +118,14 @@ def webhook_handler():
         return jsonify(status='ignored'), 200
 
     logging.info(f"Webhook received: phone={phone}")
-
-    # Enqueue Celery task
     invite_task.delay(
         phone,
         config['channel_username'],
         config['failure_message'].replace('{{channel}}', config['channel_username'])
     )
     logging.info(f"Task queued for phone={phone}")
-
     return jsonify(status='queued'), 200
 
+# --- Run server ---
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, threaded=False)
