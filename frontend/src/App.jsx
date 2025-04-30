@@ -1,34 +1,44 @@
-import { useState, useEffect } from 'react'
-import './App.css'
+// frontend/src/App.jsx
+import { useEffect, useState } from 'react'
+import axios from 'axios'
 
-function App() {
-  const [status, setStatus] = useState('loading')
-  const [queueLength, setQueueLength] = useState(null)
-
-  // 1) URL API берём из внешней конфигурации
-  const apiBase = window.APP_CONFIG?.apiBaseUrl || ''
+export default function App() {
+  const [stats, setStats] = useState({
+    invited: 0,
+    link_sent: 0,
+    failed: 0,
+    skipped: 0,
+    queue_length: 0,
+  })
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
-    // 2) Запрос статуса
-    fetch(`${apiBase}/health`)
-      .then(res => res.json())
-      .then(json => setStatus(json.status))
-      .catch(() => setStatus('error'))
+    axios.get('/api/stats')
+      .then(({ data }) => {
+        setStats(data)
+        setLoading(false)
+      })
+      .catch(err => {
+        console.error(err)
+        setError('Ошибка при загрузке статистики')
+        setLoading(false)
+      })
+  }, [])
 
-    // 3) Запрос длины очереди
-    fetch(`${apiBase}/queue_length`)
-      .then(res => res.json())
-      .then(json => setQueueLength(json.queue_length))
-      .catch(() => setQueueLength('error'))
-  }, [apiBase])
+  if (loading) return <p>Загрузка...</p>
+  if (error)   return <p style={{ color: 'red' }}>{error}</p>
 
   return (
-    <div className="App">
-      <h1>Статус сервиса</h1>
-      <p><strong>Статус сервиса:</strong> {status}</p>
-      <p><strong>Длина очереди:</strong> {queueLength}</p>
+    <div style={{ padding: 20, fontFamily: 'sans-serif' }}>
+      <h1>Dashboard Inviter</h1>
+      <ul>
+        <li><strong>Invited:</strong>   {stats.invited}</li>
+        <li><strong>Link sent:</strong> {stats.link_sent}</li>
+        <li><strong>Failed:</strong>    {stats.failed}</li>
+        <li><strong>Skipped:</strong>   {stats.skipped}</li>
+        <li><strong>Queue length:</strong> {stats.queue_length}</li>
+      </ul>
     </div>
   )
 }
-
-export default App
