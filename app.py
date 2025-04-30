@@ -3,96 +3,98 @@ import json
 import logging
 
 from flask import Flask, request, jsonify, render_template, redirect, url_for, flash
-
-# Celery-задача
+import redis
+import mysql.connector
 from tasks import invite_task
 
-# MySQL-коннектор
-import mysql.connector
-import redis
-
-# --- Конфиги и логи ---
+# --- Configuration & Defaults ---
 CONFIG_FILE = 'config.json'
 LOG_FILE    = 'app.log'
 
-# Создаём config.json, если нет
+# Database connection settings (can be overridden via ENV vars)
+DB_HOST     = os.getenv('DB_HOST',     '127.0.0.1')
+DB_PORT     = int(os.getenv('DB_PORT', '3306'))
+DB_USER     = os.getenv('DB_USER',     'telegraminvi')
+DB_PASSWORD = os.getenv('DB_PASSWORD', 'QyA9fWbh56Ln')
+DB_NAME     = os.getenv('DB_NAME',     'telegraminvi')
+
+# Celery broker (Redis) URL
+BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
+
+# Ensure config.json exists with required keys
 if not os.path.exists(CONFIG_FILE):
-    default = {
+    default_cfg = {
         "channel_username": "twstinvitebot",
-        "failure_message": (
-            "Привет! Не удалось автоматически добавить в канал, вот ссылка:\n"
-            "https://t.me/{{channel}}"
-        )
+        "failure_message": "Привет! Не удалось автоматически добавить в канал, вот ссылка:\nhttps://t.me/{{channel}}"
     }
     with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-        json.dump(default, f, ensure_ascii=False, indent=2)
+        json.dump(default_cfg, f, ensure_ascii=False, indent=2)
 
-# Загружаем config
+# Load config
 with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
     config = json.load(f)
 
-# Логирование
+# --- Logging setup ---
 logging.basicConfig(
     filename=LOG_FILE,
     level=logging.INFO,
     format='%(asctime)s %(levelname)s %(message)s'
 )
 
-# Создаём Flask-приложение
+# --- Flask app init ---
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET', 'change-me')
 
-# Параметры БД — берём из env
-DB_HOST     = os.getenv('DB_HOST', '127.0.0.1')
-DB_PORT     = int(os.getenv('DB_PORT', '3306'))
-DB_USER     = os.getenv('DB_USER', 'telegraminvi')
-DB_PASSWORD = os.getenv('DB_PASSWORD', 'QyA9fWbh56Ln')
-DB_NAME     = os.getenv('DB_NAME', 'telegraminvi')
-
-# Redis-бр�кер для Celery
-BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
-
-# --- Маршруты ---
-
+# --- Health check ---
 @app.route('/api/health', methods=['GET'])
 def health():
     return jsonify(status='ok')
 
+# --- Queue length endpoint ---
 @app.route('/api/queue_length', methods=['GET'])
 def queue_length():
     r = redis.Redis.from_url(BROKER_URL)
     length = r.llen('celery')
     return jsonify(queue_length=length)
 
+# --- Stats endpoint ---
 @app.route('/api/stats', methods=['GET'])
 def stats():
-    # Соединяемся с MySQL
+    # 1) Prepare defaults
+    stats = {
+        'invited':   0,
+        'link_sent': 0,
+        'failed':    0,
+        'skipped':   0
+    }
+
+    # 2) Query database
     cnx = mysql.connector.connect(
-      host=DB_HOST,
-      port=DB_PORT,
-      user=DB_USER,
-      password=DB_PASSWORD,
-      database=DB_NAME
+        host=DB_HOST,
+        port=DB_PORT,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        database=DB_NAME
     )
     cursor = cnx.cursor(dictionary=True)
-
-    # Собираем по статусам
     cursor.execute("""
-      SELECT status, COUNT(*) AS cnt
-      FROM invite_logs
-      GROUP BY status
+        SELECT status, COUNT(*) AS cnt
+        FROM invite_logs
+        GROUP BY status
     """)
-    rows = cursor.fetchall()
-    stats = {row['status']: row['cnt'] for row in rows}
+    for row in cursor.fetchall():
+        if row['status'] in stats:
+            stats[row['status']] = row['cnt']
+    cursor.close()
+    cnx.close()
 
-    # Длина очереди
+    # 3) Add queue length
     r = redis.Redis.from_url(BROKER_URL)
     stats['queue_length'] = r.llen('celery')
 
-    cursor.close()
-    cnx.close()
     return jsonify(stats)
 
+# --- Admin panel for editing config ---
 @app.route('/admin', methods=['GET', 'POST'])
 def admin_panel():
     global config
@@ -101,46 +103,59 @@ def admin_panel():
         config['failure_message']   = request.form['failure_message']
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
-        flash('Настройки сохранены.', 'success')
+        flash('Настройки сохранены. Готов к приёму вебхуков.', 'success')
         return redirect(url_for('admin_panel'))
     return render_template('admin.html', config=config)
 
+# --- Logs viewer ---
 @app.route('/logs')
 def view_logs():
     entries = []
     if os.path.exists(LOG_FILE):
         with open(LOG_FILE, 'r', encoding='utf-8') as f:
-            for line in f.readlines()[-200:]:
-                parts = line.strip().split(' ')
-                if len(parts) >= 4:
-                    ts    = ' '.join(parts[0:2])
-                    level = parts[2]
-                    msg   = ' '.join(parts[3:])
-                    entries.append((ts, level, msg))
+            lines = f.readlines()[-200:]
+        for line in lines:
+            parts = line.strip().split(' ')
+            if len(parts) >= 4:
+                ts    = ' '.join(parts[0:2])
+                level = parts[2]
+                rest  = ' '.join(parts[3:])
+                entries.append((ts, level, rest))
     return render_template('logs.html', entries=entries)
 
-@app.route('/webhook', methods=['GET','POST'], strict_slashes=False)
-@app.route('/webhook/', methods=['GET','POST'], strict_slashes=False)
+# --- Webhook handler ---
+@app.route('/webhook', methods=['GET', 'POST'], strict_slashes=False)
+@app.route('/webhook/', methods=['GET', 'POST'], strict_slashes=False)
 def webhook_handler():
     logging.info(
-       f"Incoming webhook: {request.method} {request.url} "
-       f"args={request.args} body={request.get_data(as_text=True)}"
+        f"Incoming webhook: method={request.method} url={request.url} "
+        f"args={request.args} data={request.get_data(as_text=True)}"
     )
-    # Извлекаем phone
-    data = request.get_json(silent=True) or {}
-    phone = data.get('phone') or data.get('ct_phone') \
-         or request.args.get('phone') or request.args.get('ct_phone')
+
+    # Extract phone number
+    phone = None
+    if request.method == 'POST':
+        data = request.get_json(force=True) or {}
+        phone = data.get('phone') or data.get('ct_phone')
+    else:
+        phone = request.args.get('phone') or request.args.get('ct_phone')
+
     if not phone:
-        logging.info("Ignored webhook: no phone")
+        logging.info("Webhook ignored: no phone parameter")
         return jsonify(status='ignored'), 200
 
-    logging.info(f"Webhook: enqueue invite_task for {phone}")
+    logging.info(f"Webhook received: phone={phone}")
+
+    # Enqueue Celery task
     invite_task.delay(
         phone,
         config['channel_username'],
         config['failure_message'].replace('{{channel}}', config['channel_username'])
     )
+    logging.info(f"Task queued for phone={phone}")
+
     return jsonify(status='queued'), 200
 
+# --- Run the app ---
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, threaded=False)
