@@ -20,26 +20,31 @@ jobs:
           node-version: '18'
 
       - name: Copy to server & deploy
-        uses: appleboy/ssh-action@v0.1.9
-        with:
-          host: ${{ secrets.SERVER_HOST }}        # 92.113.146.148
-          username: ${{ secrets.SERVER_USER }}    # admin
+          uses: appleboy/ssh-action@v0.1.9
+          with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: admin
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SERVER_SSH_PORT }}     # 22
+          port: ${{ secrets.SERVER_SSH_PORT }}
           script: |
             set -e
 
+            # --- обновляем бекенд, рестартим сервисы ---
             cd ~/telegram_invite
             git pull origin main
-
             source venv/bin/activate
             pip install -r requirements.txt
+            sudo systemctl restart telegram_inviter_celery.service telegram_inviter_flask.service
 
-            # ———— deploy nginx config ————
-            sudo cp deploy/nginx/telegram_invite.conf /etc/nginx/sites-available/telegram_invite
-            sudo ln -sf /etc/nginx/sites-available/telegram_invite /etc/nginx/sites-enabled/telegram_invite
+            # --- собираем фронтенд чисто с нуля ---
+            cd frontend
+            rm -rf dist                 # ← вот это
+            npm ci
+            npm run build
+
+            # --- отдаем новую сборку ---
             sudo systemctl reload nginx
-            # ————————————————————————
+
 
             sudo systemctl restart telegram_inviter_celery.service
             sudo systemctl restart telegram_inviter_flask.service
