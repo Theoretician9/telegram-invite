@@ -24,7 +24,7 @@ function App() {
 
   return (
     <div className="App">
-      <h1>Dashboard Inviter</h1>
+      <h1>Статус сервиса</h1>
       <p><strong>Статус сервиса:</strong> {status}</p>
       <p><strong>Длина очереди:</strong> {queueLength}</p>
     </div>
