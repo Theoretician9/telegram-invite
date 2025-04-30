@@ -22,23 +22,22 @@ jobs:
       - name: Copy to server & deploy
         uses: appleboy/ssh-action@v0.1.9
         with:
-          host: ${{ secrets.SERVER_HOST }}          # адрес вашего сервера
-          username: admin                           # или ${{ secrets.SERVER_USER }}
+          host: ${{ secrets.SERVER_HOST }}
+          username: admin
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SERVER_SSH_PORT }}
           script: |
             set -e
 
-            # 1) Обновляем код и зависимости бэкенда
+            # 1) Обновляем бэкенд
             cd ~/telegram_invite
             git pull origin main
             source venv/bin/activate
             pip install -r requirements.txt
 
-            # 2) Деплойим nginx-конфиг (в репозитории должен быть файл deploy/nginx/telegram_invite.conf)
+            # 2) Деплоим конфиг Nginx (если файл лежит в deploy/nginx/telegram_invite.conf)
             sudo cp deploy/nginx/telegram_invite.conf /etc/nginx/sites-available/telegram_invite
             sudo ln -sf /etc/nginx/sites-available/telegram_invite /etc/nginx/sites-enabled/telegram_invite
-            sudo systemctl reload nginx
 
             # 3) Перезапускаем фоновые сервисы
             sudo systemctl restart telegram_inviter_celery.service telegram_inviter_flask.service
@@ -49,5 +48,5 @@ jobs:
             npm ci
             npm run build
 
-            # 5) Перезагружаем nginx, чтобы отдать свежую статику
+            # 5) Перезагружаем Nginx, чтобы отдать новую статику
             sudo systemctl reload nginx
