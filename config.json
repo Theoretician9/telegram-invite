@@ -1,6 +1,6 @@
 {
-  "channel_username": "kkkdlasdkalsdk",
-  "failure_message": "Привет! Вам был звонок по поводу подписки на телеграм канал, вы нажали цифру 1, вот ссылка:\r\nhttps://t.me/{{channel}}",
+  "channel_username": "@perevorottt",
+  "failure_message": "Привет! Вам был звонок по поводу подписки на телеграм канал на тему развития своего дела, вы нажали цифру 1, вот ссылка:\r\nhttps://t.me/{{channel}}",
   "accounts": [
     {
       "name": "InviteBot",
