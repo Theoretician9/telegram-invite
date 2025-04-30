@@ -1,42 +1,54 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+import { useState } from 'react';
+
+function App() {
+  // состояние для инпута, ответа и загрузки
+  const [chatId, setChatId] = useState('');
+  const [status, setStatus] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  // функция отправки POST-запроса
+  const sendInvite = async () => {
+    if (!chatId) return;
+    setLoading(true);
+    setStatus(null);
+    try {
+      const res = await fetch(`${window.APP_CONFIG.apiBaseUrl}/invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      setStatus({ success: true, message: `Приглашено: ${data.invited} пользователей` });
+    } catch (err) {
+      setStatus({ success: false, message: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ padding: 20, fontFamily: 'sans-serif' }}>
+      <h1>Пригласить в Telegram</h1>
+
+      <input
+        type="text"
+        placeholder="Введите @username или ID"
+        value={chatId}
+        onChange={e => setChatId(e.target.value)}
+        style={{ padding: 8, width: '300px', marginRight: 8 }}
+      />
+      <button onClick={sendInvite} disabled={loading || !chatId}>
+        {loading ? 'Секундочку…' : 'Пригласить'}
+      </button>
+
+      {status && (
+        <p style={{ marginTop: 16, color: status.success ? 'green' : 'crimson' }}>
+          {status.message}
+        </p>
+      )}
+    </div>
+  );
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
-}
-
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
-}
-
-.card {
-  padding: 2em;
-}
-
-.read-the-docs {
-  color: #888;
-}
+export default App;
