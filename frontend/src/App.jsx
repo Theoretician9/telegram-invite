@@ -31,13 +31,13 @@ export default function App() {
 
   return (
     <div style={{ padding: 20, fontFamily: 'sans-serif' }}>
-      <h1>Dashboard Inviter</h1>
+      <h1>Панель приглашений</h1>
       <ul>
-        <li><strong>Invited:</strong>   {stats.invited}</li>
-        <li><strong>Link sent:</strong> {stats.link_sent}</li>
-        <li><strong>Failed:</strong>    {stats.failed}</li>
-        <li><strong>Skipped:</strong>   {stats.skipped}</li>
-        <li><strong>Queue length:</strong> {stats.queue_length}</li>
+        <li><strong>Приглашено:</strong>            {stats.invited}</li>
+        <li><strong>Отправлено ссылок:</strong>       {stats.link_sent}</li>
+        <li><strong>Ошибок:</strong>               {stats.failed}</li>
+        <li><strong>Пропущено:</strong>            {stats.skipped}</li>
+        <li><strong>Длина очереди:</strong>         {stats.queue_length}</li>
       </ul>
     </div>
   )
