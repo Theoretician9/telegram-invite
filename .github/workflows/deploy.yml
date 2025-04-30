@@ -34,7 +34,11 @@ jobs:
           git pull origin main
           source venv/bin/activate
           pip install -r requirements.txt
-
+        # —————— deploy nginx config ——————
+           sudo cp deploy/nginx/telegram_invite.conf /etc/nginx/sites-available/telegram_invite
+           sudo ln -sf /etc/nginx/sites-available/telegram_invite /etc/nginx/sites-enabled/telegram_invite
+           sudo systemctl reload nginx
+           # ————————————————————————————————
           # Перезапустим фоновые сервисы
           sudo systemctl restart telegram_inviter_celery.service
           sudo systemctl restart telegram_inviter_flask.service
