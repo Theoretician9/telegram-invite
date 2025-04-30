@@ -1,29 +1,34 @@
 import { useState, useEffect } from 'react'
-import axios from 'axios'
+import './App.css'
 
 function App() {
-  const [status, setStatus] = useState('загрузка…')
-  const [queue, setQueue]   = useState('–')
+  const [status, setStatus] = useState('loading')
+  const [queueLength, setQueueLength] = useState(null)
+
+  // 1) URL API берём из внешней конфигурации
+  const apiBase = window.APP_CONFIG?.apiBaseUrl || ''
 
   useEffect(() => {
-    // 1) статус сервиса
-    axios.get(`${window.APP_CONFIG.apiBaseUrl}/health`)
-      .then(res => setStatus(res.data.status))
-      .catch(() => setStatus('ошибка запроса'))
+    // 2) Запрос статуса
+    fetch(`${apiBase}/health`)
+      .then(res => res.json())
+      .then(json => setStatus(json.status))
+      .catch(() => setStatus('error'))
 
-    // 2) длина очереди
-    axios.get(`${window.APP_CONFIG.apiBaseUrl}/queue_length`)
-      .then(res => setQueue(res.data.queue_length))
-      .catch(() => setQueue('ошибка запроса'))
-  }, [])
+    // 3) Запрос длины очереди
+    fetch(`${apiBase}/queue_length`)
+      .then(res => res.json())
+      .then(json => setQueueLength(json.queue_length))
+      .catch(() => setQueueLength('error'))
+  }, [apiBase])
 
   return (
-    <div className="App" style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
-      <h1>Статус сервиса: {status}</h1>
-      <h2>Длина очереди: {queue}</h2>
+    <div className="App">
+      <h1>Dashboard Inviter</h1>
+      <p><strong>Статус сервиса:</strong> {status}</p>
+      <p><strong>Длина очереди:</strong> {queueLength}</p>
     </div>
   )
 }
 
 export default App
-
