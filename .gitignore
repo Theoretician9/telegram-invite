@@ -5,3 +5,4 @@ logs/
 app.log
 invite_session.session*
 __pycache__/
+celerybeat-schedule
