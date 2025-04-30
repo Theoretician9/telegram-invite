@@ -10,7 +10,7 @@ from tasks import invite_task
 CONFIG_FILE = 'config.json'
 LOG_FILE    = 'app.log'
 
-# Ensure config.json exists with required keys
+# Ensure config.json exists
 if not os.path.exists(CONFIG_FILE):
     default = {
         "channel_username": "twstinvitebot",
@@ -34,12 +34,12 @@ logging.basicConfig(
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET', 'change-me')
 
-# --- 1) Health check endpoint ---
+# --- Health check ---
 @app.route('/api/health', methods=['GET'])
 def health():
     return jsonify(status='ok')
 
-# --- 2) Queue length endpoint ---
+# --- Queue length endpoint ---
 @app.route('/api/queue_length', methods=['GET'])
 def queue_length():
     broker_url = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
@@ -47,28 +47,31 @@ def queue_length():
     length = r.llen('celery')
     return jsonify(queue_length=length)
 
-# --- 3) Statistics endpoint ---
-# Возвращает количество записей в invite_logs по статусам
+# --- Stats endpoint ---
 @app.route('/api/stats', methods=['GET'])
 def stats():
-    # Подключение к базе MySQL/MariaDB
-    db = mysql.connector.connect(
-        host=os.getenv('DB_HOST', 'localhost'),
-        user=os.getenv('DB_USER', 'telegraminvi'),
-        password=os.getenv('DB_PASS', 'QyA9fWbh56Ln'),
-        database=os.getenv('DB_NAME', 'telegraminvi'),
+    # 1) Считаем по MySQL
+    cnx = mysql.connector.connect(
+        host=os.getenv('MYSQL_HOST', 'localhost'),
+        user=os.getenv('MYSQL_USER', 'telegraminvi'),
+        password=os.getenv('MYSQL_PASSWORD', 'QyA9fWbh56Ln'),
+        database=os.getenv('MYSQL_DB', 'telegraminvi')
     )
-    cursor = db.cursor()
+    cursor = cnx.cursor()
     cursor.execute("SELECT status, COUNT(*) FROM invite_logs GROUP BY status")
     rows = cursor.fetchall()
-    cursor.close()
-    db.close()
+    cnx.close()
 
-    # Преобразуем в JSON-словарь
-    stats = { status: count for status, count in rows }
-    return jsonify(stats), 200
+    stats = {status: count for status, count in rows}
 
-# --- 4) Admin panel ---
+    # 2) Длина очереди из Redis
+    broker_url = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
+    r = redis.Redis.from_url(broker_url)
+    stats['queue_length'] = r.llen('celery')
+
+    return jsonify(stats)
+
+# --- Admin panel ---
 @app.route('/admin', methods=['GET', 'POST'])
 def admin_panel():
     global config
@@ -77,11 +80,11 @@ def admin_panel():
         config['failure_message']   = request.form['failure_message']
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
-        flash('Настройки сохранены. Готов к приёму вебхуков.', 'success')
+        flash('Настройки сохранены.', 'success')
         return redirect(url_for('admin_panel'))
     return render_template('admin.html', config=config)
 
-# --- 5) Logs viewer ---
+# --- Logs viewer ---
 @app.route('/logs')
 def view_logs():
     entries = []
@@ -97,7 +100,7 @@ def view_logs():
                 entries.append((ts, level, rest))
     return render_template('logs.html', entries=entries)
 
-# --- 6) Webhook handler ---
+# --- Webhook handler ---
 @app.route('/webhook', methods=['GET', 'POST'], strict_slashes=False)
 @app.route('/webhook/', methods=['GET', 'POST'], strict_slashes=False)
 def webhook_handler():
@@ -117,7 +120,6 @@ def webhook_handler():
         logging.info("Webhook ignored: no phone parameter")
         return jsonify(status='ignored'), 200
 
-    logging.info(f"Webhook received: phone={phone}")
     invite_task.delay(
         phone,
         config['channel_username'],
@@ -126,6 +128,5 @@ def webhook_handler():
     logging.info(f"Task queued for phone={phone}")
     return jsonify(status='queued'), 200
 
-# --- Run server ---
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, threaded=False)
