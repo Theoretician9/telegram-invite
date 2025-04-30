@@ -32,6 +32,9 @@ logging.basicConfig(
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET', 'change-me')
 
+@app.route('/api/health', methods=['GET'])
+def health():
+    return jsonify(status='ok')
 
 @app.route('/admin', methods=['GET', 'POST'])
 def admin_panel():
