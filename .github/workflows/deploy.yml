@@ -14,44 +14,33 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '18'
 
       - name: Copy to server & deploy
-          uses: appleboy/ssh-action@v0.1.9
-          with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: admin
+        uses: appleboy/ssh-action@v0.1.9
+        with:
+          host: ${{ secrets.SERVER_HOST }}          # ваш сервер
+          username: admin                           # или ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SERVER_SSH_PORT }}
           script: |
             set -e
 
-            # --- обновляем бекенд, рестартим сервисы ---
+            # 1) Обновляем код и зависимости бэкенда
             cd ~/telegram_invite
             git pull origin main
             source venv/bin/activate
             pip install -r requirements.txt
             sudo systemctl restart telegram_inviter_celery.service telegram_inviter_flask.service
 
-            # --- собираем фронтенд чисто с нуля ---
+            # 2) Сборка фронтенда «с нуля»
             cd frontend
-            rm -rf dist                 # ← вот это
+            rm -rf dist
             npm ci
             npm run build
 
-            # --- отдаем новую сборку ---
-            sudo systemctl reload nginx
-
-
-            sudo systemctl restart telegram_inviter_celery.service
-            sudo systemctl restart telegram_inviter_flask.service
-
-            cd frontend
-            npm ci
-            npm run build
-
-            # чтобы nginx отдал новую статическую сборку
+            # 3) Перезагружаем Nginx, чтобы он отдал новую статику
             sudo systemctl reload nginx
