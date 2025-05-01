@@ -1,5 +1,4 @@
 # .github/workflows/deploy.yml
-
 name: Deploy to Production
 
 on:
@@ -24,10 +23,10 @@ jobs:
       - name: Copy to server & deploy
         uses: appleboy/ssh-action@v0.1.9
         with:
-          host: ${{ secrets.INPUT_HOST }}
-          username: ${{ secrets.INPUT_USERNAME }}
-          key: ${{ secrets.INPUT_KEY }}
-          port: ${{ secrets.INPUT_PORT }}
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.KEY }}
+          port: ${{ secrets.PORT }}
           script: |
             set -e
 
