@@ -7,6 +7,7 @@ from flask import Flask, request, jsonify, render_template, redirect, url_for, f
 import redis
 import mysql.connector
 from tasks import invite_task
+from alerts import send_alert
 
 # --- Configuration & Logging ---
 BASE_DIR    = os.path.dirname(__file__)
@@ -30,7 +31,7 @@ DB_PASSWORD = os.getenv('DB_PASSWORD', 'QyA9fWbh56Ln')
 DB_NAME     = os.getenv('DB_NAME', 'telegraminvi')
 BROKER_URL  = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
 
-# helper to count only invite_task in Redis queue
+# --- Helper: count only invite_task in Redis queue ---
 def count_invite_tasks():
     r = redis.Redis.from_url(BROKER_URL)
     raw = r.lrange('celery', 0, -1)
@@ -38,8 +39,7 @@ def count_invite_tasks():
     for item in raw:
         try:
             payload = json.loads(item)
-            task_name = payload.get('headers', {}).get('task')
-            if task_name == 'tasks.invite_task':
+            if payload.get('headers', {}).get('task') == 'tasks.invite_task':
                 cnt += 1
         except Exception:
             continue
@@ -81,7 +81,6 @@ def stats():
     cursor.close()
     cnx.close()
 
-    # вместо r.llen('celery') считаем только invite задачи
     stats['queue_length'] = count_invite_tasks()
     return jsonify(stats)
 
@@ -155,18 +154,26 @@ def view_logs():
                 entries.append((ts, lvl, msg))
     return render_template('logs.html', entries=entries)
 
-# --- Webhook handler ---
-@app.route('/webhook', methods=['GET', 'POST'], strict_slashes=False)
-@app.route('/webhook/', methods=['GET', 'POST'], strict_slashes=False)
+# --- Webhook handler with immediate alert check ---
+@app.route('/webhook', methods=['GET','POST'], strict_slashes=False)
+@app.route('/webhook/', methods=['GET','POST'], strict_slashes=False)
 def webhook_handler():
     logging.info(f"Incoming webhook: {request.method} {request.url} data={request.get_data(as_text=True)}")
-    phone = (request.get_json(silent=True) or {}).get('phone') or request.args.get('phone')
+    payload = request.get_json(silent=True) or {}
+    phone = payload.get('phone') or request.args.get('phone')
     if not phone:
         logging.info("Webhook ignored: no phone parameter")
         return jsonify(status='ignored'), 200
 
     logging.info(f"Webhook received: phone={phone}")
     invite_task.delay(phone)
+
+    length = count_invite_tasks()
+    threshold = config.get('queue_threshold', 50)
+    logging.info(f"[webhook] Invite-task queue length after enqueue: {length}, threshold: {threshold}")
+    if length > threshold:
+        send_alert(f"⚠️ Длина очереди приглашений слишком большая: {length} задач")
+
     return jsonify(status='queued'), 200
 
 # --- API logs endpoint ---
