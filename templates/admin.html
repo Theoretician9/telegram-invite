@@ -31,6 +31,31 @@
       <textarea name="failure_message" rows="4">{{ config.failure_message }}</textarea>
     </label>
     <button type="submit">Save</button>
+  
+  <!-- Добавляем порог очереди -->
+<div class="form-group">
+  <label for="queue_threshold">Порог длины очереди</label>
+  <input type="number" class="form-control" id="queue_threshold"
+         name="queue_threshold" value="{{ config['queue_threshold'] }}" min="0" required>
+  <small class="form-text text-muted">
+    Если длина очереди больше этого значения, будет уведомление.
+  </small>
+</div>
+
+<!-- Добавляем минимальную паузу -->
+<div class="form-group">
+  <label for="pause_min_seconds">Минимальная пауза (сек)</label>
+  <input type="number" class="form-control" id="pause_min_seconds"
+         name="pause_min_seconds" value="{{ config['pause_min_seconds'] }}" min="0" required>
+</div>
+
+<!-- Добавляем максимальную паузу -->
+<div class="form-group">
+  <label for="pause_max_seconds">Максимальная пауза (сек)</label>
+  <input type="number" class="form-control" id="pause_max_seconds"
+         name="pause_max_seconds" value="{{ config['pause_max_seconds'] }}" min="0" required>
+</div>
+  
   </form>
 
   <p><a href="{{ url_for('view_logs') }}">Перейти к логам</a></p>
