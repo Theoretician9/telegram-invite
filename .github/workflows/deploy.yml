@@ -22,23 +22,23 @@ jobs:
 
       - name: Debug SSH secrets
         run: |
-          echo "HOST='${{ secrets.INPUT_HOST }}'"
-          echo "PORT='${{ secrets.INPUT_PORT }}'"
-          echo "USERNAME='${{ secrets.INPUT_USERNAME }}'"
+          echo "HOST='${{ secrets.SERVER_HOST }}'"
+          echo "PORT='${{ secrets.SERVER_SSH_PORT }}'"
+          echo "USERNAME='${{ secrets.SERVER_USER }}'"
         shell: bash
 
       - name: Copy to server & deploy
         uses: appleboy/ssh-action@v0.1.9
         with:
-          host: ${{ secrets.INPUT_HOST }}
-          username: ${{ secrets.INPUT_USERNAME }}
-          key: ${{ secrets.INPUT_KEY }}
-          port: ${{ secrets.INPUT_PORT }}
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SERVER_SSH_PORT }}
           sync: false
           script: |
             set -e
 
-            # 1) Обновляем бекенд
+            # 1) Обновляем backend
             cd ~/telegram_invite
             git fetch origin main
             git reset --hard origin/main
