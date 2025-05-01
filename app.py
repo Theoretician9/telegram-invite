@@ -78,9 +78,12 @@ def stats():
 @app.route('/admin', methods=['GET', 'POST'])
 def admin_panel():
     global config
-    if request.method == 'POST':
-        config['channel_username'] = request.form['channel_username'].strip()
-        config['failure_message'] = request.form['failure_message']
+if request.method == 'POST':
+        config['channel_username']    = request.form['channel_username'].strip()
+        config['failure_message']     = request.form['failure_message']
+        config['queue_threshold']     = int(request.form['queue_threshold'])
+        config['pause_min_seconds']   = int(request.form['pause_min_seconds'])
+        config['pause_max_seconds']   = int(request.form['pause_max_seconds'])
         with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
         flash('Настройки сохранены.', 'success')
