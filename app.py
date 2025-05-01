@@ -9,6 +9,9 @@ import mysql.connector
 from tasks import invite_task
 from alerts import send_alert
 
+import csv
+from io import StringIO
+
 # --- Configuration & Logging ---
 BASE_DIR    = os.path.dirname(__file__)
 CONFIG_PATH = os.path.join(BASE_DIR, 'config.json')
@@ -189,6 +192,44 @@ def api_logs():
         return text, 200, {'Content-Type': 'text/plain; charset=utf-8'}
     except Exception as e:
         return f"Error reading log: {e}", 500
+
+# --- API logs CSV endpoint ---
+@app.route('/api/logs/csv', methods=['GET'])
+def api_logs_csv():
+    """
+    Отдаёт все записи invite_logs в CSV:
+    колонки: id, task_id, account_name, channel_username, phone, status, reason, created_at
+    """
+    # Подключаемся к БД
+    cnx = mysql.connector.connect(
+        host=DB_HOST, port=DB_PORT,
+        user=DB_USER, password=DB_PASSWORD,
+        database=DB_NAME
+    )
+    cursor = cnx.cursor()
+    cursor.execute("""
+        SELECT id, task_id, account_name, channel_username, phone, status, reason, created_at
+        FROM invite_logs
+    """)
+    rows = cursor.fetchall()
+    cursor.close()
+    cnx.close()
+
+    # Генерируем CSV в памяти
+    output = StringIO()
+    writer = csv.writer(output)
+    # Шапка
+    writer.writerow(['id','task_id','account_name','channel_username','phone','status','reason','created_at'])
+    # Данные
+    for row in rows:
+        writer.writerow(row)
+    csv_data = output.getvalue()
+    output.close()
+
+    return csv_data, 200, {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="invite_logs.csv"'
+    }
 
 # --- Accounts endpoint ---
 @app.route('/api/accounts', methods=['GET'])
