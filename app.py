@@ -2,6 +2,7 @@ import os
 import json
 import logging
 
+from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, render_template, redirect, url_for, flash
 import redis
 import mysql.connector
@@ -29,6 +30,21 @@ DB_PASSWORD = os.getenv('DB_PASSWORD', 'QyA9fWbh56Ln')
 DB_NAME     = os.getenv('DB_NAME', 'telegraminvi')
 BROKER_URL  = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
 
+# helper to count only invite_task in Redis queue
+def count_invite_tasks():
+    r = redis.Redis.from_url(BROKER_URL)
+    raw = r.lrange('celery', 0, -1)
+    cnt = 0
+    for item in raw:
+        try:
+            payload = json.loads(item)
+            task_name = payload.get('headers', {}).get('task')
+            if task_name == 'tasks.invite_task':
+                cnt += 1
+        except Exception:
+            continue
+    return cnt
+
 # --- Flask app init ---
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET', 'change-me')
@@ -38,16 +54,16 @@ app.secret_key = os.getenv('FLASK_SECRET', 'change-me')
 def health():
     return jsonify(status='ok')
 
-# --- Queue length endpoint ---
+# --- Queue length endpoint (only invite_task) ---
 @app.route('/api/queue_length', methods=['GET'])
 def queue_length():
-    r = redis.Redis.from_url(BROKER_URL)
-    return jsonify(queue_length=r.llen('celery'))
+    return jsonify(queue_length=count_invite_tasks())
 
 # --- Stats endpoint ---
 @app.route('/api/stats', methods=['GET'])
 def stats():
     stats = {'invited': 0, 'link_sent': 0, 'failed': 0, 'skipped': 0}
+
     cnx = mysql.connector.connect(
         host=DB_HOST, port=DB_PORT,
         user=DB_USER, password=DB_PASSWORD,
@@ -64,12 +80,12 @@ def stats():
             stats[row['status']] = row['cnt']
     cursor.close()
     cnx.close()
-    r = redis.Redis.from_url(BROKER_URL)
-    stats['queue_length'] = r.llen('celery')
+
+    # вместо r.llen('celery') считаем только invite задачи
+    stats['queue_length'] = count_invite_tasks()
     return jsonify(stats)
 
 # --- Stats history endpoint ---
-from datetime import datetime, timedelta
 @app.route('/api/stats/history', methods=['GET'])
 def stats_history():
     period = request.args.get('period', 'day')
@@ -103,6 +119,7 @@ def stats_history():
     rows = cursor.fetchall()
     cursor.close()
     cnx.close()
+
     data = [{'timestamp': r['ts'], 'count': r['count']} for r in rows]
     return jsonify(data)
 
@@ -149,7 +166,6 @@ def webhook_handler():
         return jsonify(status='ignored'), 200
 
     logging.info(f"Webhook received: phone={phone}")
-    # Передаём только номер — остальные параметры берутся внутри invite_task
     invite_task.delay(phone)
     return jsonify(status='queued'), 200
 
