@@ -8,17 +8,17 @@ from celery import Celery, signals
 from datetime import timedelta
 from alerts import send_alert
 
-# ——— Load config dynamically at start ———
+# ——— Load config at start ———
 BASE_DIR    = os.path.dirname(__file__)
 CONFIG_PATH = os.path.join(BASE_DIR, 'config.json')
 with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
     cfg = json.load(f)
 
-# Broker & backend
+# ——— Broker & backend URLs ———
 BROKER_URL  = os.getenv('CELERY_BROKER_URL', cfg.get('broker_url', 'redis://127.0.0.1:6379/0'))
 BACKEND_URL = os.getenv('CELERY_RESULT_BACKEND', BROKER_URL)
 
-# Celery init
+# ——— Celery init ———
 app = Celery('inviter', broker=BROKER_URL, backend=BACKEND_URL, include=['tasks'])
 app.conf.update(
     task_serializer='json',
@@ -31,7 +31,7 @@ app.conf.update(
     task_acks_late=True,
 )
 
-# Periodic schedule (interval берём из config при старте)
+# ——— Static periodic schedule ———
 app.conf.beat_schedule = {
     'monitor-queue-every-interval': {
         'task': 'celery_app.monitor_queue',
@@ -39,10 +39,26 @@ app.conf.beat_schedule = {
     },
 }
 
-# Логгирование
+# ——— Logging setup ———
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s:%(message)s')
 
-# Сигналы для алертов
+# ——— Helper: count only invite_task in Redis queue ———
+def count_invite_tasks() -> int:
+    r = redis.Redis.from_url(BROKER_URL)
+    raw = r.lrange('celery', 0, -1)
+    cnt = 0
+    for item in raw:
+        try:
+            payload = json.loads(item)
+            task_name = payload.get('headers', {}).get('task')
+            if task_name == 'tasks.invite_task':
+                cnt += 1
+        except Exception:
+            continue
+    return cnt
+
+# ——— Signal handlers for alerts ———
+
 @signals.task_failure.connect
 def on_task_failure(sender=None, task_id=None, exception=None, **extras):
     send_alert(f"❌ Задача {sender.name}[{task_id}] упала: {exception}")
@@ -58,16 +74,19 @@ def on_task_success(sender=None, result=None, **kwargs):
             tid = sender.request.id if hasattr(sender, 'request') else None
             send_alert(f"⚠️ invite_task[{tid}] завершился с fail: {result.get('reason','')}")
 
-# Periodic monitor_queue
+# ——— Periodic monitor_queue ———
+
 @app.task(name='celery_app.monitor_queue')
 def monitor_queue():
-    # Читаем порог каждый раз заново
+    """
+    Проверяет длину очереди только invite_task и шлёт алерт, если превышен порог.
+    """
+    # читаем свежий порог
     with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
         config = json.load(f)
     threshold = int(config.get('queue_threshold', 50))
 
-    r = redis.Redis.from_url(BROKER_URL)
-    length = r.llen('celery')
-    logging.info(f"[monitor_queue] Queue length: {length}, threshold: {threshold}")
+    length = count_invite_tasks()
+    logging.info(f"[monitor_queue] Invite-task queue length: {length}, threshold: {threshold}")
     if length > threshold:
-        send_alert(f"⚠️ Длина очереди Celery слишком большая: {length} задач")
+        send_alert(f"⚠️ Длина очереди приглашений слишком большая: {length} задач")
