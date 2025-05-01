@@ -156,6 +156,18 @@ def webhook_handler():
 
     return jsonify(status='queued'), 200
 
+@app.route('/api/logs')
+def api_logs():
+    log_path = os.path.join(os.path.dirname(__file__), 'app.log')
+    try:
+        with open(log_path, 'r', encoding='utf-8') as f:
+            lines = f.read().splitlines()
+        # Можно вернуть все строки или последние, но фронтенд берёт последние 50
+        text = '\n'.join(lines)
+        return text, 200, {'Content-Type': 'text/plain; charset=utf-8'}
+    except Exception as e:
+        return f"Error reading log: {e}", 500
+
 # --- Run the app ---
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, threaded=False)
