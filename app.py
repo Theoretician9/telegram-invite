@@ -12,11 +12,9 @@ BASE_DIR    = os.path.dirname(__file__)
 CONFIG_PATH = os.path.join(BASE_DIR, 'config.json')
 LOG_PATH    = os.path.join(BASE_DIR, 'app.log')
 
-# Load config
 with open(CONFIG_PATH, 'r', encoding='utf-8') as cfg_file:
     config = json.load(cfg_file)
 
-# Setup logging
 logging.basicConfig(
     filename=LOG_PATH,
     level=logging.INFO,
@@ -70,16 +68,54 @@ def stats():
     stats['queue_length'] = r.llen('celery')
     return jsonify(stats)
 
+# --- Stats history endpoint ---
+from datetime import datetime, timedelta
+@app.route('/api/stats/history', methods=['GET'])
+def stats_history():
+    period = request.args.get('period', 'day')
+    cnx = mysql.connector.connect(
+        host=DB_HOST, port=DB_PORT,
+        user=DB_USER, password=DB_PASSWORD,
+        database=DB_NAME
+    )
+    cursor = cnx.cursor(dictionary=True)
+    now = datetime.utcnow()
+    if period == 'week':
+        start = now - timedelta(days=7)
+        cursor.execute("""
+            SELECT DATE(created_at) AS ts, COUNT(*) AS count
+            FROM invite_logs
+            WHERE created_at >= %s
+            GROUP BY DATE(created_at)
+            ORDER BY ts
+        """, (start,))
+    else:
+        start = now - timedelta(hours=24)
+        cursor.execute("""
+            SELECT
+              DATE_FORMAT(created_at, '%%Y-%%m-%%dT%%H:00:00Z') AS ts,
+              COUNT(*) AS count
+            FROM invite_logs
+            WHERE created_at >= %s
+            GROUP BY DATE_FORMAT(created_at, '%%Y-%%m-%%dT%%H')
+            ORDER BY ts
+        """, (start,))
+    rows = cursor.fetchall()
+    cursor.close()
+    cnx.close()
+    data = [{'timestamp': r['ts'], 'count': r['count']} for r in rows]
+    return jsonify(data)
+
 # --- Admin panel ---
 @app.route('/admin', methods=['GET', 'POST'])
 def admin_panel():
     global config
     if request.method == 'POST':
-        config['channel_username']  = request.form['channel_username'].strip()
-        config['failure_message']   = request.form['failure_message']
-        config['queue_threshold']   = int(request.form['queue_threshold'])
-        config['pause_min_seconds'] = int(request.form['pause_min_seconds'])
-        config['pause_max_seconds'] = int(request.form['pause_max_seconds'])
+        config['channel_username']    = request.form['channel_username'].strip()
+        config['failure_message']     = request.form['failure_message']
+        config['queue_threshold']     = int(request.form['queue_threshold'])
+        config['pause_min_seconds']   = int(request.form['pause_min_seconds'])
+        config['pause_max_seconds']   = int(request.form['pause_max_seconds'])
         with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
         flash('Настройки сохранены.', 'success')
@@ -96,9 +132,9 @@ def view_logs():
         for line in lines:
             parts = line.strip().split(' ')
             if len(parts) >= 4:
-                ts    = ' '.join(parts[0:2])
-                lvl   = parts[2]
-                msg   = ' '.join(parts[3:])
+                ts  = ' '.join(parts[0:2])
+                lvl = parts[2]
+                msg = ' '.join(parts[3:])
                 entries.append((ts, lvl, msg))
     return render_template('logs.html', entries=entries)
 
@@ -113,11 +149,8 @@ def webhook_handler():
         return jsonify(status='ignored'), 200
 
     logging.info(f"Webhook received: phone={phone}")
-    invite_task.delay(
-        phone,
-        config['channel_username'],
-        config['failure_message'].replace('{{channel}}', config['channel_username'])
-    )
+    # Передаём только номер — остальные параметры берутся внутри invite_task
+    invite_task.delay(phone)
     return jsonify(status='queued'), 200
 
 # --- API logs endpoint ---
