@@ -29,7 +29,6 @@ DB_PORT     = int(os.getenv('DB_PORT', '3306'))
 DB_USER     = os.getenv('DB_USER', 'telegraminvi')
 DB_PASSWORD = os.getenv('DB_PASSWORD', 'QyA9fWbh56Ln')
 DB_NAME     = os.getenv('DB_NAME', 'telegraminvi')
-
 BROKER_URL  = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
 
 # --- Flask app init ---
@@ -45,14 +44,12 @@ def health():
 @app.route('/api/queue_length', methods=['GET'])
 def queue_length():
     r = redis.Redis.from_url(BROKER_URL)
-    length = r.llen('celery')
-    return jsonify(queue_length=length)
+    return jsonify(queue_length=r.llen('celery'))
 
 # --- Stats endpoint ---
 @app.route('/api/stats', methods=['GET'])
 def stats():
     stats = {'invited': 0, 'link_sent': 0, 'failed': 0, 'skipped': 0}
-    # Собираем данные из БД
     cnx = mysql.connector.connect(
         host=DB_HOST, port=DB_PORT,
         user=DB_USER, password=DB_PASSWORD,
@@ -69,7 +66,6 @@ def stats():
             stats[row['status']] = row['cnt']
     cursor.close()
     cnx.close()
-    # Дополняем длиной очереди в Redis
     r = redis.Redis.from_url(BROKER_URL)
     stats['queue_length'] = r.llen('celery')
     return jsonify(stats)
@@ -78,12 +74,12 @@ def stats():
 @app.route('/admin', methods=['GET', 'POST'])
 def admin_panel():
     global config
-if request.method == 'POST':
-        config['channel_username']    = request.form['channel_username'].strip()
-        config['failure_message']     = request.form['failure_message']
-        config['queue_threshold']     = int(request.form['queue_threshold'])
-        config['pause_min_seconds']   = int(request.form['pause_min_seconds'])
-        config['pause_max_seconds']   = int(request.form['pause_max_seconds'])
+    if request.method == 'POST':
+        config['channel_username']  = request.form['channel_username'].strip()
+        config['failure_message']   = request.form['failure_message']
+        config['queue_threshold']   = int(request.form['queue_threshold'])
+        config['pause_min_seconds'] = int(request.form['pause_min_seconds'])
+        config['pause_max_seconds'] = int(request.form['pause_max_seconds'])
         with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
         flash('Настройки сохранены.', 'success')
@@ -91,7 +87,7 @@ if request.method == 'POST':
     return render_template('admin.html', config=config)
 
 # --- Logs viewer (HTML) ---
-@app.route('/logs')
+@app.route('/logs', methods=['GET'])
 def view_logs():
     entries = []
     if os.path.exists(LOG_PATH):
@@ -100,26 +96,18 @@ def view_logs():
         for line in lines:
             parts = line.strip().split(' ')
             if len(parts) >= 4:
-                ts = ' '.join(parts[0:2])
-                level = parts[2]
-                rest = ' '.join(parts[3:])
-                entries.append((ts, level, rest))
+                ts    = ' '.join(parts[0:2])
+                lvl   = parts[2]
+                msg   = ' '.join(parts[3:])
+                entries.append((ts, lvl, msg))
     return render_template('logs.html', entries=entries)
 
 # --- Webhook handler ---
 @app.route('/webhook', methods=['GET', 'POST'], strict_slashes=False)
 @app.route('/webhook/', methods=['GET', 'POST'], strict_slashes=False)
 def webhook_handler():
-    logging.info(
-        f"Incoming webhook: method={request.method} url={request.url} "
-        f"args={request.args} data={request.get_data(as_text=True)}"
-    )
-    if request.method == 'POST':
-        data = request.get_json(force=True) or {}
-        phone = data.get('phone') or data.get('ct_phone')
-    else:
-        phone = request.args.get('phone') or request.args.get('ct_phone')
-
+    logging.info(f"Incoming webhook: {request.method} {request.url} data={request.get_data(as_text=True)}")
+    phone = (request.get_json(silent=True) or {}).get('phone') or request.args.get('phone')
     if not phone:
         logging.info("Webhook ignored: no phone parameter")
         return jsonify(status='ignored'), 200
@@ -130,16 +118,14 @@ def webhook_handler():
         config['channel_username'],
         config['failure_message'].replace('{{channel}}', config['channel_username'])
     )
-    logging.info(f"Task queued for phone={phone}")
     return jsonify(status='queued'), 200
 
-# --- API logs endpoint (plain text) ---
+# --- API logs endpoint ---
 @app.route('/api/logs', methods=['GET'])
 def api_logs():
     try:
         with open(LOG_PATH, 'r', encoding='utf-8') as f:
-            lines = f.read().splitlines()
-        text = '\n'.join(lines)
+            text = f.read()
         return text, 200, {'Content-Type': 'text/plain; charset=utf-8'}
     except Exception as e:
         return f"Error reading log: {e}", 500
@@ -148,15 +134,11 @@ def api_logs():
 @app.route('/api/accounts', methods=['GET'])
 def api_accounts():
     conn = mysql.connector.connect(
-        host=DB_HOST,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        database=DB_NAME
+        host=DB_HOST, user=DB_USER,
+        password=DB_PASSWORD, database=DB_NAME
     )
     cursor = conn.cursor(dictionary=True)
-    cursor.execute(
-        "SELECT name, last_used, invites_left FROM accounts"
-    )
+    cursor.execute("SELECT name, last_used, invites_left FROM accounts")
     rows = cursor.fetchall()
     cursor.close()
     conn.close()
