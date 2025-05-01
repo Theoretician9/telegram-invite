@@ -1,7 +1,6 @@
 # tasks.py
 
 import os
-import json
 import random
 import time
 import logging
@@ -19,21 +18,16 @@ from telethon.tl.functions.channels import InviteToChannelRequest
 from telethon.tl.functions.messages import ExportChatInviteRequest
 from telethon.tl.types import InputPhoneContact
 
-# ————————————————
-# Загрузка конфигурации
-BASE_DIR = os.path.dirname(__file__)
-with open(os.path.join(BASE_DIR, 'config.json'), 'r', encoding='utf-8') as f:
-    config = json.load(f)
-
-# Логгер
+# Настройка логгера
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# Параметры БД
+# Параметры БД из окружения
 DB_HOST = os.getenv('DB_HOST', '127.0.0.1')
 DB_NAME = os.getenv('DB_NAME', 'telegraminvi')
 DB_USER = os.getenv('DB_USER', 'telegraminvi')
 DB_PASS = os.getenv('DB_PASS', 'QyA9fWbh56Ln')
+
 
 def get_db_conn():
     return pymysql.connect(
@@ -45,22 +39,27 @@ def get_db_conn():
         cursorclass=pymysql.cursors.DictCursor,
     )
 
+
 @app.task(bind=True, max_retries=3)
 def invite_task(self, phone: str):
-    # 0) Конфиг
-    channel      = config['channel_username']
-    failure_msg  = config['failure_message'].replace('{{channel}}', channel)
-    accounts     = [a for a in config.get('accounts', []) if a.get('is_active')]
+    """Приглашает номер в канал или шлёт ссылку, затем делает паузу."""
+    # Каждый вызов читает свежий config.json
+    cfg_path = os.path.join(os.path.dirname(__file__), 'config.json')
+    with open(cfg_path, 'r', encoding='utf-8') as f:
+        config = __import__('json').load(f)
+
+    channel     = config['channel_username']
+    failure_msg = config['failure_message'].replace('{{channel}}', channel)
+    accounts    = [a for a in config.get('accounts', []) if a.get('is_active')]
     if not accounts:
         raise RuntimeError('Нет активных аккаунтов в config.json')
 
-    # 1) Дедупликация: пропустить, если уже приглашали
+    # 1) Пропуск, если уже приглашали
     conn = get_db_conn()
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT 1 FROM invite_logs "
-                "WHERE phone=%s AND channel_username=%s AND status='invited' LIMIT 1",
+                "SELECT 1 FROM invite_logs WHERE phone=%s AND channel_username=%s AND status='invited' LIMIT 1",
                 (phone, channel)
             )
             if cur.fetchone():
@@ -76,11 +75,11 @@ def invite_task(self, phone: str):
     finally:
         conn.close()
 
-    # 2) Выбираем аккаунт и стартуем Telethon
-    acct   = random.choice(accounts)
+    # 2) Выбираем аккаунт
+    acct = random.choice(accounts)
     client = TelegramClient(acct['session_file'], acct['api_id'], acct['api_hash'])
     client.start()
-    logger.info(f"[{self.request.id}] Старт invite_task: phone={phone}, channel={channel}, account={acct['name']}")
+    logger.info(f"[{self.request.id}] Start invite_task: phone={phone}, channel={channel}, account={acct['name']}")
 
     status = 'failed'
     reason = None
@@ -99,30 +98,33 @@ def invite_task(self, phone: str):
         else:
             user_id = imported[0].user_id if imported else users[0].id
 
-            # 4) Пауза перед приглашением (60–300 сек)
-            pause = random.uniform(60, 300)
-            logger.info(f"[{self.request.id}] Пауза перед InviteToChannel: {pause:.1f}s")
-            time.sleep(pause)
+            # 4) Пауза перед Invite
+            pause_before = random.uniform(
+                config.get('pause_min_seconds', 1),
+                config.get('pause_max_seconds', 3)
+            )
+            logger.info(f"[{self.request.id}] Пауза перед Invite: {pause_before:.1f}s")
+            time.sleep(pause_before)
 
-            # 5) Приглашаем
+            # 5) Приглашение или ссылка
             try:
                 client(InviteToChannelRequest(channel, [user_id]))
                 status = 'invited'
-                logger.info(f"[{self.request.id}] InviteToChannel: приглашение отправлено")
+                logger.info(f"[{self.request.id}] InviteToChannel: отправлено")
             except (UserPrivacyRestrictedError, UserNotMutualContactError):
-                logger.info(f"[{self.request.id}] Не получилось пригласить напрямую, шлём ссылку")
+                logger.info(f"[{self.request.id}] Шлём ссылку")
                 link = client(ExportChatInviteRequest(channel)).link
                 client.send_message(user_id, f"{failure_msg}\n{link}")
                 status = 'link_sent'
             except FloodWaitError as e:
-                logger.warning(f"[{self.request.id}] FloodWait {e.seconds}s, retrying")
+                logger.warning(f"[{self.request.id}] FloodWait {e.seconds}s")
                 raise self.retry(countdown=e.seconds)
             except PeerFloodError as e:
                 wait = random.uniform(3600, 7200)
-                logger.warning(f"[{self.request.id}] PeerFloodError: жду {wait:.1f}s перед retry")
+                logger.warning(f"[{self.request.id}] PeerFloodError, жду {wait:.1f}s")
                 raise self.retry(countdown=wait)
 
-            # 6) Удаляем контакт
+            # 6) Удаление контакта
             client(DeleteContactsRequest(id=[user_id]))
             logger.info(f"[{self.request.id}] Контакт удалён")
 
@@ -130,7 +132,7 @@ def invite_task(self, phone: str):
         client.disconnect()
         logger.info(f"[{self.request.id}] Завершено invite_task")
 
-    # 7) Логируем результат в БД
+    # 7) Логируем в БД
     conn = get_db_conn()
     try:
         with conn.cursor() as cur:
