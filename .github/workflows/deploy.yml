@@ -8,8 +8,8 @@ on:
 
 jobs:
   deploy:
-    name: Deploy
     runs-on: ubuntu-latest
+    name: Deploy
 
     steps:
       - name: Checkout code
@@ -23,35 +23,35 @@ jobs:
       - name: Copy to server & deploy
         uses: appleboy/ssh-action@v0.1.9
         with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.KEY }}
-          port: ${{ secrets.PORT }}
+          host: ${{ secrets.INPUT_HOST }}
+          username: ${{ secrets.INPUT_USERNAME }}
+          key: ${{ secrets.INPUT_KEY }}
+          port: ${{ secrets.INPUT_PORT }}
           script: |
             set -e
 
-            # 1) Update backend code
+            # 1) Обновляем backend
             cd ~/telegram_invite
             git fetch origin main
             git reset --hard origin/main
 
-            # 2) Install Python dependencies
+            # 2) Устанавливаем Python-зависимости
             source venv/bin/activate
             pip install -r requirements.txt
 
-            # 3) Deploy Nginx configuration
+            # 3) Деплоим конфиг Nginx
             sudo cp deploy/nginx/telegram_invite.conf /etc/nginx/sites-available/telegram_invite
             sudo ln -sf /etc/nginx/sites-available/telegram_invite /etc/nginx/sites-enabled/telegram_invite
 
-            # 4) Restart backend services
+            # 4) Перезапускаем сервисы
             sudo systemctl restart telegram_inviter_celery.service
             sudo systemctl restart telegram_inviter_flask.service
 
-            # 5) Build frontend
+            # 5) Сборка фронтенда
             cd frontend
             sudo rm -rf dist
             npm ci
             npm run build
 
-            # 6) Reload Nginx to pick up new static files
+            # 6) Перезагружаем Nginx
             sudo systemctl reload nginx
