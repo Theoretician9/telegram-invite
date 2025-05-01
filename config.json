@@ -8,8 +8,8 @@
       "api_hash": "02f2aadfe27c0e407856c371c111630d",
       "session_file": "invite_session.session",
       "is_active": true
-      "auth_user": "admin",
-      "auth_pass": "hui"
+      "auth_user": "adminuser",
+      "auth_pass": "strongpassword"
     }
   ],
   "queue_threshold": 100,
