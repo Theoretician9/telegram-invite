@@ -168,6 +168,22 @@ def api_logs():
     except Exception as e:
         return f"Error reading log: {e}", 500
 
+@app.route('/api/accounts')
+def api_accounts():
+    # соединение с БД
+    conn = mysql.connector.connect(
+        host='127.0.0.1',
+        user='telegraminvi',
+        password='QyA9fWbh56Ln',
+        database='telegraminvi'
+    )
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT name, last_used, invites_left FROM accounts")
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return jsonify(rows)
+
 # --- Run the app ---
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, threaded=False)
