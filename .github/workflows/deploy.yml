@@ -8,8 +8,8 @@ on:
 
 jobs:
   deploy:
-    name: Deploy
     runs-on: ubuntu-latest
+    name: Deploy
 
     steps:
       - name: Checkout code
@@ -24,7 +24,7 @@ jobs:
         run: |
           echo "HOST='${{ secrets.SERVER_HOST }}'"
           echo "PORT='${{ secrets.SERVER_SSH_PORT }}'"
-          echo "USERNAME='${{ secrets.SERVER_USER }}'"
+          echo "USER='${{ secrets.SERVER_USER }}'"
         shell: bash
 
       - name: Copy to server & deploy
@@ -38,28 +38,25 @@ jobs:
           script: |
             set -e
 
-            # 1) Обновляем backend
+            # Backend
             cd ~/telegram_invite
             git fetch origin main
             git reset --hard origin/main
-
-            # 2) Устанавливаем Python-зависимости
             source venv/bin/activate
             pip install -r requirements.txt
 
-            # 3) Деплоим конфиг Nginx
+            # Nginx config
             sudo cp deploy/nginx/telegram_invite.conf /etc/nginx/sites-available/telegram_invite
             sudo ln -sf /etc/nginx/sites-available/telegram_invite /etc/nginx/sites-enabled/telegram_invite
 
-            # 4) Перезапускаем сервисы
+            # Restart services
             sudo systemctl restart telegram_inviter_celery.service
             sudo systemctl restart telegram_inviter_flask.service
 
-            # 5) Сборка фронтенда
+            # Frontend build
             cd frontend
-            sudo rm -rf dist
             npm ci
             npm run build
 
-            # 6) Перезагружаем Nginx
+            # Reload Nginx
             sudo systemctl reload nginx
