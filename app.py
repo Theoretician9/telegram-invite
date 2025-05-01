@@ -99,26 +99,26 @@ def stats_history():
     )
     cursor = cnx.cursor(dictionary=True)
     now = datetime.utcnow()
+
     if period == 'week':
         start = now - timedelta(days=7)
         cursor.execute("""
-            SELECT DATE(created_at) AS ts, COUNT(*) AS count
+            SELECT DATE_FORMAT(created_at, '%Y-%m-%d') AS ts, COUNT(*) AS count
             FROM invite_logs
             WHERE created_at >= %s
-            GROUP BY DATE(created_at)
+            GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')
             ORDER BY ts
         """, (start,))
     else:
         start = now - timedelta(hours=24)
         cursor.execute("""
-            SELECT
-              DATE_FORMAT(created_at, '%%Y-%%m-%%dT%%H:00:00Z') AS ts,
-              COUNT(*) AS count
+            SELECT DATE_FORMAT(created_at, '%Y-%m-%dT%H:00:00Z') AS ts, COUNT(*) AS count
             FROM invite_logs
             WHERE created_at >= %s
-            GROUP BY DATE_FORMAT(created_at, '%%Y-%%m-%%dT%%H')
+            GROUP BY DATE_FORMAT(created_at, '%Y-%m-%dT%H')
             ORDER BY ts
         """, (start,))
+
     rows = cursor.fetchall()
     cursor.close()
     cnx.close()
@@ -158,7 +158,7 @@ def view_logs():
                 entries.append((ts, lvl, msg))
     return render_template('logs.html', entries=entries)
 
-# --- Webhook handler ---
+# --- Webhook handler with immediate alert check ---
 @app.route('/webhook', methods=['GET','POST'], strict_slashes=False)
 @app.route('/webhook/', methods=['GET','POST'], strict_slashes=False)
 def webhook_handler():
@@ -172,7 +172,6 @@ def webhook_handler():
     logging.info(f"Webhook received: phone={phone}")
     invite_task.delay(phone)
 
-    # immediate alert check
     length = count_invite_tasks()
     threshold = config.get('queue_threshold', 50)
     logging.info(f"[webhook] Invite-task queue length after enqueue: {length}, threshold: {threshold}")
