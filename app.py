@@ -1,183 +1,249 @@
 import os
-import json
-import logging
-from functools import wraps
-
-from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, Response, abort
-from flask_httpauth import HTTPBasicAuth
-import redis
-import mysql.connector
-from tasks import invite_task
-
-# Логгирование в файл
-LOG_FILE = 'app.log'
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s %(levelname)s:%(message)s',
-    handlers=[logging.FileHandler(LOG_FILE), logging.StreamHandler()]
-)
-
-app = Flask(__name__, template_folder='templates', static_folder='static')
-app.secret_key = os.getenv('FLASK_SECRET', 'change_this')
-auth = HTTPBasicAuth()
-
-# Пользователи для Basic Auth можно задать через переменные окружения
-USERS = {
-    os.getenv('ADMIN_USER', 'admin'): os.getenv('ADMIN_PASS', 'password')
-}
-
-@auth.verify_password
-def verify(username, password):
-    if username in USERS and USERS[username] == password:
-        return username
-    return None
-
-def load_config():
-    with open('config.json', 'r', encoding='utf-8') as f:
-        return json.load(f)
-
-def save_config(cfg):
-    with open('config.json', 'w', encoding='utf-8') as f:
-        json.dump(cfg, f, ensure_ascii=False, indent=2)
-
-@app.route('/admin', methods=['GET', 'POST'])
-@auth.login_required
-def admin_panel():
-    cfg = load_config()
-    if request.method == 'POST':
-        # читаем новые значения из формы
-        cfg['channel_username'] = request.form['channel_username']
-        cfg['failure_message'] = request.form['failure_message']
-        # тайминги
-        cfg['pause_min_seconds'] = int(request.form['pause_min_seconds'])
-        cfg['pause_max_seconds'] = int(request.form['pause_max_seconds'])
-        save_config(cfg)
-        flash('Настройки сохранены', 'success')
-        return redirect(url_for('admin_panel'))
-    return render_template('admin.html', config=cfg)
-
-@app.route('/api/stats', methods=['GET'])
-@auth.login_required
-def api_stats():
-    cfg = load_config()
-    try:
-        # Подключаемся к MySQL
-        db = mysql.connector.connect(
-            host=os.getenv('DB_HOST', 'localhost'),
-            user=os.getenv('DB_USER', 'telegraminvi'),
-            password=os.getenv('DB_PASS', ''),
-            database=os.getenv('DB_NAME', 'telegraminvi')
-        )
-        cursor = db.cursor(dictionary=True)
-        cursor.execute("""
-            SELECT
-              SUM(status='invited')   AS invited,
-              SUM(status='link_sent')  AS link_sent,
-              SUM(status='failed')     AS failed,
-              SUM(status='skipped')    AS skipped
-            FROM invite_logs
-        """)
-        row = cursor.fetchone() or {}
-        cursor.close()
-        db.close()
-
-        # Подключаемся к Redis
-        r = redis.Redis.from_url(os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/0'))
-        queue_len = r.llen(cfg.get('redis_queue_name', 'invite_queue'))
-
-        result = {
-            'invited':   int(row.get('invited')   or 0),
-            'link_sent': int(row.get('link_sent') or 0),
-            'failed':    int(row.get('failed')    or 0),
-            'skipped':   int(row.get('skipped')   or 0),
-            'queue_length': queue_len
-        }
-        return jsonify(result)
-    except Exception as e:
-        logging.exception("Error in /api/stats")
-        return jsonify({'error': 'Internal server error'}), 500
-
-@app.route('/api/logs', methods=['GET'])
-@auth.login_required
-def api_logs():
-    try:
-        # читаем последние 200 строк
-        with open(LOG_FILE, 'r', encoding='utf-8') as f:
-            lines = f.readlines()[-200:]
-        # возвращаем сырые, без парсинга
-        return Response(''.join(lines), mimetype='text/plain; charset=utf-8')
-    except Exception:
-        logging.exception("Error in /api/logs")
-        return jsonify({'error': 'Cannot read logs'}), 500
-
-@app.route('/api/accounts', methods=['GET'])
-@auth.login_required
-def api_accounts():
-    try:
-        cfg = load_config()
-        accounts = cfg.get('accounts', [])
-        return jsonify(accounts)
-    except Exception:
-        logging.exception("Error in /api/accounts")
-        return jsonify({'error': 'Cannot read accounts'}), 500
-
-@app.route('/api/stats/history', methods=['GET'])
-@auth.login_required
-def api_stats_history():
-    period = request.args.get('period', 'day')
-    cfg = load_config()
-    try:
-        db = mysql.connector.connect(
-            host=os.getenv('DB_HOST', 'localhost'),
-            user=os.getenv('DB_USER', 'telegraminvi'),
-            password=os.getenv('DB_PASS', ''),
-            database=os.getenv('DB_NAME', 'telegraminvi')
-        )
-        cursor = db.cursor(dictionary=True)
-        if period == 'day':
-            cursor.execute("""
-                SELECT
-                  DATE_FORMAT(created_at, '%%Y-%%m-%%dT%%H:00:00Z') AS timestamp,
-                  COUNT(*) AS count
-                FROM invite_logs
-                WHERE created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
-                GROUP BY DATE_FORMAT(created_at, '%%Y-%%m-%%dT%%H')
-                ORDER BY timestamp
-            """)
-        else:
-            cursor.execute("""
-                SELECT
-                  DATE_FORMAT(created_at, '%%Y-%%m-%%d') AS timestamp,
-                  COUNT(*) AS count
-                FROM invite_logs
-                WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-                GROUP BY DATE_FORMAT(created_at, '%%Y-%%m-%%d')
-                ORDER BY timestamp
-            """)
-        data = cursor.fetchall()
-        cursor.close()
-        db.close()
-        return jsonify(data)
-    except Exception:
-        logging.exception("Error in /api/stats/history")
-        return jsonify({'error': 'Internal server error'}), 500
-
-@app.route('/webhook', methods=['POST', 'GET'])
-def webhook_handler():
-    # для GET тоже поддерживается
-    data = request.get_json() or request.args.to_dict()
-    phone = data.get('phone')
-    if not phone:
-        return jsonify({'error': 'phone required'}), 400
-
-    logging.info(f"Webhook received: phone={phone}")
-    cfg = load_config()
-    # ставим задачу
-    invite_task.delay(phone, cfg['channel_username'], cfg['failure_message'])
-    logging.info(f"Task queued for phone={phone}")
-    return jsonify({'status': 'ok'})
-
-if __name__ == '__main__':
-    # dev-server
-    logging.info("Starting Flask app")
-    app.run(host='0.0.0.0', port=5000)
+ import json
+ import logging
+ 
+ from datetime import datetime, timedelta
+ from flask import Flask, request, jsonify, render_template, redirect, url_for, flash
+ import redis
+ import mysql.connector
+ from tasks import invite_task
+ from alerts import send_alert
+ 
+ import csv
+ from io import StringIO
+ 
+ # --- Configuration & Logging ---
+ BASE_DIR    = os.path.dirname(__file__)
+ CONFIG_PATH = os.path.join(BASE_DIR, 'config.json')
+ LOG_PATH    = os.path.join(BASE_DIR, 'app.log')
+ 
+ with open(CONFIG_PATH, 'r', encoding='utf-8') as cfg_file:
+     config = json.load(cfg_file)
+ 
+ logging.basicConfig(
+     filename=LOG_PATH,
+     level=logging.INFO,
+     format='%(asctime)s %(levelname)s:%(message)s'
+ )
+ 
+ # --- Database and Redis settings ---
+ DB_HOST     = os.getenv('DB_HOST', '127.0.0.1')
+ DB_PORT     = int(os.getenv('DB_PORT', '3306'))
+ DB_USER     = os.getenv('DB_USER', 'telegraminvi')
+ DB_PASSWORD = os.getenv('DB_PASSWORD', 'QyA9fWbh56Ln')
+ DB_NAME     = os.getenv('DB_NAME', 'telegraminvi')
+ BROKER_URL  = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
+ 
+ # --- Helper: count only invite_task in Redis queue ---
+ def count_invite_tasks():
+     r = redis.Redis.from_url(BROKER_URL)
+     raw = r.lrange('celery', 0, -1)
+     cnt = 0
+     for item in raw:
+         try:
+             payload = json.loads(item)
+             if payload.get('headers', {}).get('task') == 'tasks.invite_task':
+                 cnt += 1
+         except Exception:
+             continue
+     return cnt
+ 
+ # --- Flask app init ---
+ app = Flask(__name__)
+ app.secret_key = os.getenv('FLASK_SECRET', 'change-me')
+ 
+ # --- Health check ---
+ @app.route('/api/health', methods=['GET'])
+ def health():
+     return jsonify(status='ok')
+ 
+ # --- Queue length endpoint (only invite_task) ---
+ @app.route('/api/queue_length', methods=['GET'])
+ def queue_length():
+     return jsonify(queue_length=count_invite_tasks())
+ 
+ # --- Stats endpoint ---
+ @app.route('/api/stats', methods=['GET'])
+ def stats():
+     stats = {'invited': 0, 'link_sent': 0, 'failed': 0, 'skipped': 0}
+ 
+     cnx = mysql.connector.connect(
+         host=DB_HOST, port=DB_PORT,
+         user=DB_USER, password=DB_PASSWORD,
+         database=DB_NAME
+     )
+     cursor = cnx.cursor(dictionary=True)
+     cursor.execute("""
+         SELECT status, COUNT(*) AS cnt
+         FROM invite_logs
+         GROUP BY status
+     """)
+     for row in cursor.fetchall():
+         if row['status'] in stats:
+             stats[row['status']] = row['cnt']
+     cursor.close()
+     cnx.close()
+ 
+     stats['queue_length'] = count_invite_tasks()
+     return jsonify(stats)
+ 
+ # --- Stats history endpoint (Step 18) ---
+ @app.route('/api/stats/history', methods=['GET'])
+ def stats_history():
+     """
+     ?period=day  — по часу за последние 24 часа
+     ?period=week — по дню за последние 7 дней
+     """
+     period = request.args.get('period', 'day')
+     cnx = mysql.connector.connect(
+         host=DB_HOST, port=DB_PORT,
+         user=DB_USER, password=DB_PASSWORD,
+         database=DB_NAME
+     )
+     cursor = cnx.cursor(dictionary=True)
+     now = datetime.utcnow()
+ 
+     if period == 'week':
+         start = now - timedelta(days=7)
+         cursor.execute("""
+             SELECT DATE_FORMAT(created_at, '%Y-%m-%d') AS ts, COUNT(*) AS count
+             FROM invite_logs
+             WHERE created_at >= %s
+             GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')
+             ORDER BY ts
+         """, (start,))
+     else:
+         start = now - timedelta(hours=24)
+         cursor.execute("""
+             SELECT DATE_FORMAT(created_at, '%Y-%m-%dT%H:00:00Z') AS ts, COUNT(*) AS count
+             FROM invite_logs
+             WHERE created_at >= %s
+             GROUP BY DATE_FORMAT(created_at, '%Y-%m-%dT%H')
+             ORDER BY ts
+         """, (start,))
+ 
+     rows = cursor.fetchall()
+     cursor.close()
+     cnx.close()
+ 
+     data = [{'timestamp': r['ts'], 'count': r['count']} for r in rows]
+     return jsonify(data)
+ 
+ # --- Admin panel ---
+ @app.route('/admin', methods=['GET', 'POST'])
+ def admin_panel():
+     global config
+     if request.method == 'POST':
+         config['channel_username']    = request.form['channel_username'].strip()
+         config['failure_message']     = request.form['failure_message']
+         config['queue_threshold']     = int(request.form['queue_threshold'])
+         config['pause_min_seconds']   = int(request.form['pause_min_seconds'])
+         config['pause_max_seconds']   = int(request.form['pause_max_seconds'])
+         with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+             json.dump(config, f, ensure_ascii=False, indent=2)
+         flash('Настройки сохранены.', 'success')
+         return redirect(url_for('admin_panel'))
+     return render_template('admin.html', config=config)
+ 
+ # --- Logs viewer (HTML) ---
+ @app.route('/logs', methods=['GET'])
+ def view_logs():
+     entries = []
+     if os.path.exists(LOG_PATH):
+         with open(LOG_PATH, 'r', encoding='utf-8') as f:
+             lines = f.readlines()[-200:]
+         for line in lines:
+             parts = line.strip().split(' ')
+             if len(parts) >= 4:
+                 ts  = ' '.join(parts[0:2])
+                 lvl = parts[2]
+                 msg = ' '.join(parts[3:])
+                 entries.append((ts, lvl, msg))
+     return render_template('logs.html', entries=entries)
+ 
+ # --- Webhook handler with immediate alert check ---
+ @app.route('/webhook', methods=['GET','POST'], strict_slashes=False)
+ @app.route('/webhook/', methods=['GET','POST'], strict_slashes=False)
+ def webhook_handler():
+     logging.info(f"Incoming webhook: {request.method} {request.url} data={request.get_data(as_text=True)}")
+     payload = request.get_json(silent=True) or {}
+     phone = payload.get('phone') or request.args.get('phone')
+     if not phone:
+         logging.info("Webhook ignored: no phone parameter")
+         return jsonify(status='ignored'), 200
+ 
+     logging.info(f"Webhook received: phone={phone}")
+     invite_task.delay(phone)
+ 
+     length = count_invite_tasks()
+     threshold = config.get('queue_threshold', 50)
+     logging.info(f"[webhook] Invite-task queue length after enqueue: {length}, threshold: {threshold}")
+     if length > threshold:
+         send_alert(f"⚠️ Длина очереди приглашений слишком большая: {length} задач")
+ 
+     return jsonify(status='queued'), 200
+ 
+ # --- API logs endpoint ---
+ @app.route('/api/logs', methods=['GET'])
+ def api_logs():
+     try:
+         with open(LOG_PATH, 'r', encoding='utf-8') as f:
+             text = f.read()
+         return text, 200, {'Content-Type': 'text/plain; charset=utf-8'}
+     except Exception as e:
+         return f"Error reading log: {e}", 500
+ 
+ # --- API logs CSV endpoint ---
+ @app.route('/api/logs/csv', methods=['GET'])
+ def api_logs_csv():
+     """
+     Отдаёт все записи invite_logs в CSV:
+     колонки: id, task_id, account_name, channel_username, phone, status, reason, created_at
+     """
+     # Подключаемся к БД
+     cnx = mysql.connector.connect(
+         host=DB_HOST, port=DB_PORT,
+         user=DB_USER, password=DB_PASSWORD,
+         database=DB_NAME
+     )
+     cursor = cnx.cursor()
+     cursor.execute("""
+         SELECT id, task_id, account_name, channel_username, phone, status, reason, created_at
+         FROM invite_logs
+     """)
+     rows = cursor.fetchall()
+     cursor.close()
+     cnx.close()
+ 
+     # Генерируем CSV в памяти
+     output = StringIO()
+     writer = csv.writer(output)
+     # Шапка
+     writer.writerow(['id','task_id','account_name','channel_username','phone','status','reason','created_at'])
+     # Данные
+     for row in rows:
+         writer.writerow(row)
+     csv_data = output.getvalue()
+     output.close()
+ 
+     return csv_data, 200, {
+         'Content-Type': 'text/csv; charset=utf-8',
+         'Content-Disposition': 'attachment; filename="invite_logs.csv"'
+     }
+ 
+ # --- Accounts endpoint ---
+ @app.route('/api/accounts', methods=['GET'])
+ def api_accounts():
+     conn = mysql.connector.connect(
+         host=DB_HOST, user=DB_USER,
+         password=DB_PASSWORD, database=DB_NAME
+     )
+     cursor = conn.cursor(dictionary=True)
+     cursor.execute("SELECT name, last_used, invites_left FROM accounts")
+     rows = cursor.fetchall()
+     cursor.close()
+     conn.close()
+     return jsonify(rows)
+ 
+ if __name__ == '__main__':
+     app.run(host='0.0.0.0', port=5000, threaded=False)
