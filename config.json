@@ -8,11 +8,13 @@
       "api_hash": "02f2aadfe27c0e407856c371c111630d",
       "session_file": "invite_session.session",
       "is_active": true
-      "auth_user": "adminuser",
-      "auth_pass": "strongpassword"
     }
   ],
-  "queue_threshold": 100,
-  "pause_min_seconds": 1,
-  "pause_max_seconds": 3
+  "queue_threshold": 1,
+  "pause_min_seconds": 120,
+  "pause_max_seconds": 300,
+  "monitor_interval_seconds": 30,
+  "broker_url": "redis://127.0.0.1:6379/0",
+  "auth_user": "admin",
+  "auth_pass": "usAG86vSZQah"
 }
