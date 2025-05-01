@@ -9,5 +9,8 @@
       "session_file": "invite_session.session",
       "is_active": true
     }
-  ]
+  ],
+  "queue_threshold": 100,
+  "pause_min_seconds": 1,
+  "pause_max_seconds": 3
 }
