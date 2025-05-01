@@ -40,16 +40,19 @@ export default function Logs() {
         {loading ? 'Загрузка…' : 'Обновить'}
       </button>
       {error && <p style={{ color: 'red' }}>{error}</p>}
-      <pre style={{
-        background: '#f0f0f0',
-        padding: 10,
-        maxHeight: '70vh',
-        overflowY: 'auto',
-        marginTop: 10
-      }}>
-        {lines.map((l, i) => <div key={i}>{l}</div>)}
-        <div ref={bottomRef} />
-      </pre>
+<pre style={{
+  background: '#f0f0f0',
+  color: '#000',          // текст чёрный
+  padding: 10,
+  maxHeight: '70vh',
+  overflowY: 'auto',
+  marginTop: 10,
+  whiteSpace: 'pre-wrap', // чтобы длинные строки переносились
+  wordBreak: 'break-all'
+}}>
+  {lines.map((l, i) => <div key={i}>{l}</div>)}
+  <div ref={bottomRef} />
+</pre>
     </div>
   )
 }
