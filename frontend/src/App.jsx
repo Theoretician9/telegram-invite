@@ -1,4 +1,5 @@
 // frontend/src/App.jsx
+
 import { useEffect, useState } from 'react'
 import axios from 'axios'
 
@@ -14,30 +15,47 @@ export default function App() {
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    axios.get('/api/stats')
-      .then(({ data }) => {
-        setStats(data)
-        setLoading(false)
-      })
-      .catch(err => {
-        console.error(err)
-        setError('Ошибка при загрузке статистики')
-        setLoading(false)
-      })
+    let isMounted = true
+
+    const fetchStats = () => {
+      axios.get('/api/stats')
+        .then(({ data }) => {
+          if (!isMounted) return
+          setStats(data)
+          setError(null)
+        })
+        .catch(err => {
+          console.error(err)
+          if (isMounted) setError('Ошибка при загрузке статистики')
+        })
+        .finally(() => {
+          if (isMounted) setLoading(false)
+        })
+    }
+
+    // первый вызов сразу при монтировании
+    fetchStats()
+    // повторять каждые 5 секунд
+    const intervalId = setInterval(fetchStats, 5000)
+
+    return () => {
+      isMounted = false
+      clearInterval(intervalId)
+    }
   }, [])
 
   if (loading) return <p>Загрузка...</p>
-  if (error)   return <p style={{ color: 'red' }}>{error}</p>
+  if (error) return <p style={{ color: 'red' }}>{error}</p>
 
   return (
     <div style={{ padding: 20, fontFamily: 'sans-serif' }}>
       <h1>Панель приглашений</h1>
       <ul>
-        <li><strong>Приглашено:</strong>            {stats.invited}</li>
-        <li><strong>Отправлено ссылок:</strong>       {stats.link_sent}</li>
-        <li><strong>Ошибок:</strong>               {stats.failed}</li>
-        <li><strong>Пропущено:</strong>            {stats.skipped}</li>
-        <li><strong>Длина очереди:</strong>         {stats.queue_length}</li>
+        <li><strong>Приглашено:</strong> {stats.invited}</li>
+        <li><strong>Отправлено ссылок:</strong> {stats.link_sent}</li>
+        <li><strong>Ошибок:</strong> {stats.failed}</li>
+        <li><strong>Пропущено:</strong> {stats.skipped}</li>
+        <li><strong>Длина очереди:</strong> {stats.queue_length}</li>
       </ul>
     </div>
   )
