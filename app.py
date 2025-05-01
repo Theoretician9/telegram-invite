@@ -84,9 +84,13 @@ def stats():
     stats['queue_length'] = count_invite_tasks()
     return jsonify(stats)
 
-# --- Stats history endpoint ---
+# --- Stats history endpoint (Step 18) ---
 @app.route('/api/stats/history', methods=['GET'])
 def stats_history():
+    """
+    ?period=day  — по часу за последние 24 часа
+    ?period=week — по дню за последние 7 дней
+    """
     period = request.args.get('period', 'day')
     cnx = mysql.connector.connect(
         host=DB_HOST, port=DB_PORT,
@@ -154,7 +158,7 @@ def view_logs():
                 entries.append((ts, lvl, msg))
     return render_template('logs.html', entries=entries)
 
-# --- Webhook handler with immediate alert check ---
+# --- Webhook handler ---
 @app.route('/webhook', methods=['GET','POST'], strict_slashes=False)
 @app.route('/webhook/', methods=['GET','POST'], strict_slashes=False)
 def webhook_handler():
@@ -168,6 +172,7 @@ def webhook_handler():
     logging.info(f"Webhook received: phone={phone}")
     invite_task.delay(phone)
 
+    # immediate alert check
     length = count_invite_tasks()
     threshold = config.get('queue_threshold', 50)
     logging.info(f"[webhook] Invite-task queue length after enqueue: {length}, threshold: {threshold}")
