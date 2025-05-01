@@ -8,8 +8,19 @@ import mysql.connector
 from tasks import invite_task
 
 # --- Configuration & Defaults ---
-CONFIG_FILE = 'config.json'
-LOG_FILE    = 'app.log'
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.json')
+LOG_PATH    = os.path.join(os.path.dirname(__file__), 'app.log')
+
+# Загружаем конфигурацию
+with open(CONFIG_PATH, 'r', encoding='utf-8') as cfg_file:
+    CONFIG = json.load(cfg_file)
+
+# Настраиваем логгер
+logging.basicConfig(
+    filename=LOG_PATH,
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s:%(message)s'
+)
 
 # Database connection settings (can be overridden via ENV vars)
 DB_HOST     = os.getenv('DB_HOST',     '127.0.0.1')
