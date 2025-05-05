@@ -26,53 +26,38 @@
       Channel username (без @):
       <input name="channel_username" value="{{ config.channel_username }}">
     </label>
+
     <label>
       Failure message ({{'{{channel}}'}} заменится на имя канала):
       <textarea name="failure_message" rows="4">{{ config.failure_message }}</textarea>
     </label>
-    <button type="submit">Save</button>
-  <!-- Чекбоксы -->
-      <div class="form-group">
+
     <label>
-      <input type="checkbox" name="only_message_bot"
-             {% if config.only_message_bot %}checked{% endif %}>
+      <input type="checkbox" name="only_message_bot" {% if config.only_message_bot %}checked{% endif %}>
       Только отправлять сообщение боту (не приглашать в канал)
     </label>
-  </div>
-  <div class="form-group">
+
     <label>
-      <input type="checkbox" name="invite_and_message"
-             {% if config.invite_and_message %}checked{% endif %}>
-      Приглашать в канал <strong>и</strong> отправлять сообщение боту
+      <input type="checkbox" name="invite_and_message" {% if config.invite_and_message %}checked{% endif %}>
+      Приглашать в канал и отправлять сообщение боту
     </label>
-  </div>
-  <button type="submit" class="btn btn-primary">Сохранить</button>
-</form>
-  
-  <!-- Добавляем порог очереди -->
-<div class="form-group">
-  <label for="queue_threshold">Порог длины очереди</label>
-  <input type="number" class="form-control" id="queue_threshold"
-         name="queue_threshold" value="{{ config['queue_threshold'] }}" min="0" required>
-  <small class="form-text text-muted">
-    Если длина очереди больше этого значения, будет уведомление.
-  </small>
-</div>
 
-<!-- Добавляем минимальную паузу -->
-<div class="form-group">
-  <label for="pause_min_seconds">Минимальная пауза (сек)</label>
-  <input type="number" class="form-control" id="pause_min_seconds"
-         name="pause_min_seconds" value="{{ config['pause_min_seconds'] }}" min="0" required>
-</div>
+    <label>
+      Порог длины очереди:
+      <input type="number" name="queue_threshold" value="{{ config.queue_threshold }}" min="0">
+    </label>
 
-<!-- Добавляем максимальную паузу -->
-<div class="form-group">
-  <label for="pause_max_seconds">Максимальная пауза (сек)</label>
-  <input type="number" class="form-control" id="pause_max_seconds"
-         name="pause_max_seconds" value="{{ config['pause_max_seconds'] }}" min="0" required>
-</div>
-  
+    <label>
+      Минимальная пауза (сек):
+      <input type="number" name="pause_min_seconds" value="{{ config.pause_min_seconds }}" min="0">
+    </label>
+
+    <label>
+      Максимальная пауза (сек):
+      <input type="number" name="pause_max_seconds" value="{{ config.pause_max_seconds }}" min="0">
+    </label>
+
+    <button type="submit">Сохранить</button>
   </form>
 
   <p><a href="{{ url_for('view_logs') }}">Перейти к логам</a></p>
