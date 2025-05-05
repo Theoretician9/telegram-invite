@@ -17,4 +17,6 @@
   "broker_url": "redis://127.0.0.1:6379/0",
   "auth_user": "admin",
   "auth_pass": "usAG86vSZQah"
+  "only_message_bot": false,
+  "invite_and_message": false
 }
