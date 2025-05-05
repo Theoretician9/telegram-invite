@@ -31,6 +31,23 @@
       <textarea name="failure_message" rows="4">{{ config.failure_message }}</textarea>
     </label>
     <button type="submit">Save</button>
+  <!-- Чекбоксы -->
+      <div class="form-group">
+    <label>
+      <input type="checkbox" name="only_message_bot"
+             {% if config.only_message_bot %}checked{% endif %}>
+      Только отправлять сообщение боту (не приглашать в канал)
+    </label>
+  </div>
+  <div class="form-group">
+    <label>
+      <input type="checkbox" name="invite_and_message"
+             {% if config.invite_and_message %}checked{% endif %}>
+      Приглашать в канал <strong>и</strong> отправлять сообщение боту
+    </label>
+  </div>
+  <button type="submit" class="btn btn-primary">Сохранить</button>
+</form>
   
   <!-- Добавляем порог очереди -->
 <div class="form-group">
