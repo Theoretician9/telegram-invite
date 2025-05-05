@@ -50,6 +50,8 @@ def invite_task(self, phone: str):
 
     channel     = config['channel_username']
     failure_msg = config['failure_message'].replace('{{channel}}', channel)
+    only_message_bot   = config.get('only_message_bot', False)
+    invite_and_message = config.get('invite_and_message', False)
     accounts    = [a for a in config.get('accounts', []) if a.get('is_active')]
     if not accounts:
         raise RuntimeError('Нет активных аккаунтов в config.json')
@@ -103,19 +105,34 @@ def invite_task(self, phone: str):
                 config.get('pause_min_seconds', 1),
                 config.get('pause_max_seconds', 3)
             )
-            logger.info(f"[{self.request.id}] Пауза перед Invite: {pause_before:.1f}s")
+            logger.info(f"[{self.request.id}] Пауза перед действием: {pause_before:.1f}s")
             time.sleep(pause_before)
 
-            # 5) Приглашение или ссылка
+            # 5) Выбор логики действия
             try:
-                client(InviteToChannelRequest(channel, [user_id]))
-                status = 'invited'
-                logger.info(f"[{self.request.id}] InviteToChannel: отправлено")
-            except (UserPrivacyRestrictedError, UserNotMutualContactError):
-                logger.info(f"[{self.request.id}] Шлём ссылку")
-                link = client(ExportChatInviteRequest(channel)).link
-                client.send_message(user_id, f"{failure_msg}\n{link}")
-                status = 'link_sent'
+                if only_message_bot:
+                    logger.info(f"[{self.request.id}] Только сообщение без приглашения")
+                    link = client(ExportChatInviteRequest(channel)).link
+                    client.send_message(user_id, f"{failure_msg}\n{link}")
+                    status = 'link_sent'
+
+                elif invite_and_message:
+                    logger.info(f"[{self.request.id}] Приглашение и сообщение")
+                    client(InviteToChannelRequest(channel, [user_id]))
+                    status = 'invited'
+                    link = client(ExportChatInviteRequest(channel)).link
+                    client.send_message(user_id, f"{failure_msg}\n{link}")
+
+                else:
+                    logger.info(f"[{self.request.id}] Приглашение, если ошибка — сообщение")
+                    try:
+                        client(InviteToChannelRequest(channel, [user_id]))
+                        status = 'invited'
+                    except (UserPrivacyRestrictedError, UserNotMutualContactError):
+                        link = client(ExportChatInviteRequest(channel)).link
+                        client.send_message(user_id, f"{failure_msg}\n{link}")
+                        status = 'link_sent'
+
             except FloodWaitError as e:
                 logger.warning(f"[{self.request.id}] FloodWait {e.seconds}s")
                 raise self.retry(countdown=e.seconds)
