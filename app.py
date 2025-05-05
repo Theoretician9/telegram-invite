@@ -133,16 +133,25 @@ def stats_history():
 @app.route('/admin', methods=['GET', 'POST'])
 def admin_panel():
     global config
+    # Убедимся, что новые ключи всегда есть
+    config.setdefault('only_message_bot', False)
+    config.setdefault('invite_and_message', False)
+
     if request.method == 'POST':
         config['channel_username']  = request.form['channel_username'].strip()
         config['failure_message']   = request.form['failure_message']
         config['queue_threshold']   = int(request.form['queue_threshold'])
         config['pause_min_seconds'] = int(request.form['pause_min_seconds'])
         config['pause_max_seconds'] = int(request.form['pause_max_seconds'])
+        # Новые чекбоксы:
+        config['only_message_bot']     = 'only_message_bot' in request.form
+        config['invite_and_message']   = 'invite_and_message' in request.form
+
         with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
         flash('Настройки сохранены.', 'success')
         return redirect(url_for('admin_panel'))
+
     return render_template('admin.html', config=config)
 
 # --- Logs viewer (HTML) ---
