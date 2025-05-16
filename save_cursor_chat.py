@@ -10,8 +10,8 @@ INTERVAL_SECONDS = 5 * 60  # 5 минут
 
 def save_chat():
     try:
-        # Активируем окно Cursor
-        win = next((w for w in gw.getWindowsWithTitle("Cursor") if w.isVisible), None)
+        # Ищем окно Cursor
+        win = next((w for w in gw.getWindowsWithTitle("Cursor")), None)
         if not win:
             print("❌ Окно Cursor не найдено.")
             return
@@ -19,7 +19,7 @@ def save_chat():
         win.activate()
         time.sleep(1)
 
-        # Сфокусироваться на чате — мышь вниз вправо (на область GPT), копируем
+        # Наводим курсор на правую нижнюю часть — чатовая панель примерно там
         pyautogui.moveTo(win.left + win.width - 300, win.top + win.height - 200)
         pyautogui.click()
         time.sleep(0.3)
