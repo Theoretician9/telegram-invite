@@ -10,6 +10,7 @@ from tasks import invite_task
 from alerts import send_alert
 from parser import parse_group_with_account
 import uuid
+import glob
 
 import csv
 from io import StringIO
@@ -321,6 +322,22 @@ def parse_status():
 def download_parsed(filename):
     """Скачивание результатов парсинга"""
     try:
+        return send_file(
+            filename,
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 404
+
+@app.route('/api/parse/download/latest', methods=['GET'])
+def download_latest_parsed():
+    """Скачивание самого свежего файла парсинга"""
+    try:
+        files = sorted(glob.glob('parsed_usernames_*.txt'), key=os.path.getmtime, reverse=True)
+        if not files:
+            return jsonify({'error': 'Файл не найден'}), 404
+        filename = files[0]
         return send_file(
             filename,
             as_attachment=True,
