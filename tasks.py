@@ -5,6 +5,8 @@ import random
 import time
 import logging
 import pymysql
+import json
+from datetime import datetime
 
 from celery_app import app
 from telethon.sync import TelegramClient
@@ -38,6 +40,49 @@ def get_db_conn():
         charset='utf8mb4',
         cursorclass=pymysql.cursors.DictCursor,
     )
+
+
+def get_next_account():
+    """Получает следующий доступный аккаунт из конфига"""
+    cfg_path = os.path.join(os.path.dirname(__file__), 'config.json')
+    with open(cfg_path, 'r', encoding='utf-8') as f:
+        config = json.load(f)
+    
+    accounts = [a for a in config.get('accounts', []) if a.get('is_active')]
+    if not accounts:
+        return None
+    
+    # Получаем информацию о последнем использовании аккаунтов
+    conn = get_db_conn()
+    try:
+        with conn.cursor(dictionary=True) as cur:
+            cur.execute("""
+                SELECT account_name, MAX(created_at) as last_used
+                FROM invite_logs
+                GROUP BY account_name
+            """)
+            last_used = {row['account_name']: row['last_used'] for row in cur.fetchall()}
+    finally:
+        conn.close()
+    
+    # Сортируем аккаунты по времени последнего использования
+    accounts.sort(key=lambda x: last_used.get(x['name'], datetime.min))
+    return accounts[0]
+
+
+def log_invite(task_id, account_name, channel_username, identifier, status, reason=None):
+    """Логирует результат приглашения в базу данных"""
+    conn = get_db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO invite_logs 
+                (task_id, account_name, channel_username, phone, status, reason)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (task_id, account_name, channel_username, identifier, status, reason))
+            conn.commit()
+    finally:
+        conn.close()
 
 
 @app.task(bind=True, max_retries=3)
