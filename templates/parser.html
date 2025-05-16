@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Парсер подписчиков Telegram</h2>
+    
+    <div class="card mt-4">
+        <div class="card-body">
+            <form id="parserForm">
+                <div class="mb-3">
+                    <label for="groupLink" class="form-label">Ссылка на группу</label>
+                    <input type="text" class="form-control" id="groupLink" 
+                           placeholder="https://t.me/group_name" required>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="limit" class="form-label">Количество ID для сбора</label>
+                    <input type="number" class="form-control" id="limit" 
+                           value="100" min="1" max="1000">
+                </div>
+                
+                <button type="submit" class="btn btn-primary" id="startButton">
+                    Начать парсинг
+                </button>
+            </form>
+        </div>
+    </div>
+    
+    <div class="card mt-4" id="progressCard" style="display: none;">
+        <div class="card-body">
+            <h5 class="card-title">Прогресс</h5>
+            <div class="progress mb-3">
+                <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+            </div>
+            <div id="statusText">Подготовка к парсингу...</div>
+        </div>
+    </div>
+    
+    <div class="card mt-4" id="resultsCard" style="display: none;">
+        <div class="card-body">
+            <h5 class="card-title">Результаты</h5>
+            <div id="resultsText"></div>
+            <button class="btn btn-success mt-3" id="downloadButton" style="display: none;">
+                Скачать результаты
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('parserForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const groupLink = document.getElementById('groupLink').value;
+    const limit = document.getElementById('limit').value;
+    const startButton = document.getElementById('startButton');
+    const progressCard = document.getElementById('progressCard');
+    const resultsCard = document.getElementById('resultsCard');
+    
+    startButton.disabled = true;
+    progressCard.style.display = 'block';
+    resultsCard.style.display = 'none';
+    
+    try {
+        const response = await fetch('/api/parse', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                group_link: groupLink,
+                limit: parseInt(limit)
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            startPolling();
+        } else {
+            throw new Error(data.error || 'Ошибка при запуске парсинга');
+        }
+    } catch (error) {
+        alert(error.message);
+        startButton.disabled = false;
+        progressCard.style.display = 'none';
+    }
+});
+
+function startPolling() {
+    const progressBar = document.querySelector('.progress-bar');
+    const statusText = document.getElementById('statusText');
+    const resultsText = document.getElementById('resultsText');
+    const downloadButton = document.getElementById('downloadButton');
+    
+    const poll = async () => {
+        try {
+            const response = await fetch('/api/parse/status');
+            const data = await response.json();
+            
+            if (data.status === 'completed') {
+                progressBar.style.width = '100%';
+                statusText.textContent = 'Парсинг завершен';
+                resultsText.textContent = `Найдено ${data.total} уникальных ID`;
+                downloadButton.style.display = 'block';
+                return;
+            }
+            
+            progressBar.style.width = `${data.progress}%`;
+            statusText.textContent = `Прогресс: ${data.progress}%`;
+            
+            setTimeout(poll, 1000);
+        } catch (error) {
+            statusText.textContent = 'Ошибка при получении статуса';
+            console.error(error);
+        }
+    };
+    
+    poll();
+}
+
+document.getElementById('downloadButton').addEventListener('click', async () => {
+    try {
+        const response = await fetch('/api/parse/download/latest');
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'parsed_usernames.txt';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+    } catch (error) {
+        alert('Ошибка при скачивании файла');
+        console.error(error);
+    }
+});
+</script>
+{% endblock %} 
