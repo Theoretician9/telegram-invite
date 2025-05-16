@@ -376,5 +376,24 @@ def bulk_invite():
         logging.error(f"Error processing bulk invite file: {str(e)}")
         return jsonify(error=str(e)), 500
 
+@app.route('/api/invite_log', methods=['GET'])
+def api_invite_log():
+    cnx = mysql.connector.connect(
+        host=DB_HOST, port=DB_PORT,
+        user=DB_USER, password=DB_PASSWORD,
+        database=DB_NAME
+    )
+    cursor = cnx.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT phone, status, reason, created_at
+        FROM invite_logs
+        ORDER BY created_at DESC
+        LIMIT 100
+    """)
+    logs = cursor.fetchall()
+    cursor.close()
+    cnx.close()
+    return jsonify(logs)
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, threaded=False)

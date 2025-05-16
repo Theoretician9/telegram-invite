@@ -108,5 +108,21 @@ function startQueueMonitoring() {
     
     poll();
 }
+
+function updateInviteLog() {
+    fetch('/api/invite_log')
+        .then(response => response.json())
+        .then(logs => {
+            const logElem = document.getElementById('inviteLog');
+            logElem.textContent = logs.map(
+                log => `${log.phone}: ${log.status}${log.reason ? ' (' + log.reason + ')' : ''}`
+            ).join('\n');
+            document.getElementById('logCard').style.display = 'block';
+        });
+    setTimeout(updateInviteLog, 3000);
+}
+
+// Запускать после старта приглашения
+updateInviteLog();
 </script>
 {% endblock %} 
