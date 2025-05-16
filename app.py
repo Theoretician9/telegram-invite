@@ -332,19 +332,46 @@ def download_parsed(filename):
 
 @app.route('/api/parse/download/latest', methods=['GET'])
 def download_latest_parsed():
-    """Скачивание самого свежего файла парсинга"""
+    files = glob.glob('parsed_usernames_*.txt')
+    if not files:
+        return jsonify(error='No files found'), 404
+    latest_file = max(files, key=os.path.getctime)
+    return send_file(latest_file, as_attachment=True)
+
+@app.route('/api/bulk_invite', methods=['POST'])
+def bulk_invite():
+    if 'file' not in request.files:
+        return jsonify(error='No file uploaded'), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify(error='No file selected'), 400
+    
+    if not file.filename.endswith('.txt'):
+        return jsonify(error='Only .txt files are allowed'), 400
+    
     try:
-        files = sorted(glob.glob('parsed_usernames_*.txt'), key=os.path.getmtime, reverse=True)
-        if not files:
-            return jsonify({'error': 'Файл не найден'}), 404
-        filename = files[0]
-        return send_file(
-            filename,
-            as_attachment=True,
-            download_name=filename
-        )
+        # Читаем файл и получаем список ID
+        usernames = [line.strip() for line in file.read().decode('utf-8').splitlines() if line.strip()]
+        
+        # Получаем настройки из конфига
+        channel = config.get('channel_username')
+        if not channel:
+            return jsonify(error='Channel not configured'), 400
+        
+        # Добавляем задачи в очередь
+        for username in usernames:
+            invite_task.delay(username, channel)
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'Added {len(usernames)} tasks to queue',
+            'count': len(usernames)
+        })
+        
     except Exception as e:
-        return jsonify({'error': str(e)}), 404
+        logging.error(f"Error processing bulk invite file: {str(e)}")
+        return jsonify(error=str(e)), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, threaded=False)
