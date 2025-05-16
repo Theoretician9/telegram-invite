@@ -97,7 +97,7 @@ function startPolling() {
             if (data.status === 'completed') {
                 progressBar.style.width = '100%';
                 statusText.textContent = 'Парсинг завершен';
-                resultsText.textContent = `Найдено ${data.total} уникальных ID`;
+                resultsText.textContent = data.total ? `Найдено ${data.total} уникальных ID` : '';
                 downloadButton.style.display = 'block';
                 return;
             }
