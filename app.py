@@ -1,13 +1,14 @@
 import os
 import json
 import logging
-
+import asyncio
 from datetime import datetime, timedelta
-from flask import Flask, request, jsonify, render_template, redirect, url_for, flash
+from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, send_file
 import redis
 import mysql.connector
 from tasks import invite_task
 from alerts import send_alert
+from parser import parse_group_with_account
 
 import csv
 from io import StringIO
@@ -249,6 +250,82 @@ def api_accounts():
     cursor.close()
     conn.close()
     return jsonify(rows)
+
+# --- Parser endpoints ---
+@app.route('/parser', methods=['GET'])
+def parser_page():
+    """Страница с интерфейсом парсера"""
+    return render_template('parser.html')
+
+@app.route('/api/parse', methods=['POST'])
+def start_parsing():
+    """Запуск процесса парсинга"""
+    try:
+        data = request.get_json()
+        group_link = data.get('group_link')
+        limit = int(data.get('limit', 100))
+        
+        if not group_link:
+            return jsonify({'error': 'Не указана ссылка на группу'}), 400
+            
+        # Получаем конфигурацию аккаунта
+        with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+            
+        if not config.get('accounts'):
+            return jsonify({'error': 'Нет доступных аккаунтов'}), 400
+            
+        # Используем первый активный аккаунт
+        account = next((acc for acc in config['accounts'] if acc.get('is_active')), None)
+        if not account:
+            return jsonify({'error': 'Нет активных аккаунтов'}), 400
+            
+        # Запускаем парсинг в отдельном потоке
+        def run_parser():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                usernames = loop.run_until_complete(
+                    parse_group_with_account(group_link, limit, account)
+                )
+                return usernames
+            finally:
+                loop.close()
+                
+        # Запускаем парсинг асинхронно
+        import threading
+        thread = threading.Thread(target=run_parser)
+        thread.start()
+        
+        return jsonify({
+            'status': 'started',
+            'message': 'Парсинг запущен'
+        })
+        
+    except Exception as e:
+        logger.error(f"Ошибка при запуске парсинга: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/parse/status', methods=['GET'])
+def parse_status():
+    """Получение статуса парсинга"""
+    # TODO: Реализовать отслеживание статуса парсинга
+    return jsonify({
+        'status': 'in_progress',
+        'progress': 0
+    })
+
+@app.route('/api/parse/download/<filename>', methods=['GET'])
+def download_parsed(filename):
+    """Скачивание результатов парсинга"""
+    try:
+        return send_file(
+            filename,
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 404
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, threaded=False)
