@@ -9,6 +9,7 @@ import mysql.connector
 from tasks import invite_task
 from alerts import send_alert
 from parser import parse_group_with_account
+import uuid
 
 import csv
 from io import StringIO
@@ -264,44 +265,38 @@ def start_parsing():
         data = request.get_json()
         group_link = data.get('group_link')
         limit = int(data.get('limit', 100))
-        
         if not group_link:
             return jsonify({'error': 'Не указана ссылка на группу'}), 400
-            
         # Получаем конфигурацию аккаунта
         with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
             config = json.load(f)
-            
         if not config.get('accounts'):
             return jsonify({'error': 'Нет доступных аккаунтов'}), 400
-            
-        # Используем первый активный аккаунт
         account = next((acc for acc in config['accounts'] if acc.get('is_active')), None)
         if not account:
             return jsonify({'error': 'Нет активных аккаунтов'}), 400
-            
+        # Генерируем уникальный task_id для статуса
+        task_id = str(uuid.uuid4())
         # Запускаем парсинг в отдельном потоке
         def run_parser():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
+                from parser import parse_group_with_account
                 usernames = loop.run_until_complete(
-                    parse_group_with_account(group_link, limit, account)
+                    parse_group_with_account(group_link, limit, account, task_id)
                 )
                 return usernames
             finally:
                 loop.close()
-                
-        # Запускаем парсинг асинхронно
         import threading
         thread = threading.Thread(target=run_parser)
         thread.start()
-        
         return jsonify({
             'status': 'started',
-            'message': 'Парсинг запущен'
+            'message': 'Парсинг запущен',
+            'task_id': task_id
         })
-        
     except Exception as e:
         logger.error(f"Ошибка при запуске парсинга: {str(e)}")
         return jsonify({'error': str(e)}), 500
@@ -309,11 +304,18 @@ def start_parsing():
 @app.route('/api/parse/status', methods=['GET'])
 def parse_status():
     """Получение статуса парсинга"""
-    # TODO: Реализовать отслеживание статуса парсинга
-    return jsonify({
-        'status': 'in_progress',
-        'progress': 0
-    })
+    import redis
+    task_id = request.args.get('task_id')
+    if not task_id:
+        return jsonify({'error': 'Не указан task_id'}), 400
+    REDIS_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
+    redis_client = redis.Redis.from_url(REDIS_URL)
+    status = redis_client.hgetall(f'parse_status:{task_id}')
+    if not status:
+        return jsonify({'status': 'not_found', 'progress': 0})
+    # Декодируем байты
+    status = {k.decode(): v.decode() for k, v in status.items()}
+    return jsonify(status)
 
 @app.route('/api/parse/download/<filename>', methods=['GET'])
 def download_parsed(filename):
