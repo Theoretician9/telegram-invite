@@ -94,6 +94,11 @@ def invite_task(self, identifier, channel_username=None):
     """
     account = None
     try:
+        # Загружаем конфигурацию
+        cfg_path = os.path.join(os.path.dirname(__file__), 'config.json')
+        with open(cfg_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+
         # Получаем настройки из конфига
         if not channel_username:
             channel_username = config.get('channel_username')
