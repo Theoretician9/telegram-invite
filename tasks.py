@@ -55,7 +55,7 @@ def get_next_account():
     # Получаем информацию о последнем использовании аккаунтов
     conn = get_db_conn()
     try:
-        with conn.cursor(dictionary=True) as cur:
+        with conn.cursor() as cur:
             cur.execute("""
                 SELECT account_name, MAX(created_at) as last_used
                 FROM invite_logs
