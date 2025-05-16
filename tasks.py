@@ -92,6 +92,7 @@ def invite_task(self, identifier, channel_username=None):
     :param identifier: Номер телефона или username пользователя
     :param channel_username: Имя канала (если не указано, берется из конфига)
     """
+    account = None
     try:
         # Получаем настройки из конфига
         if not channel_username:
@@ -142,7 +143,7 @@ def invite_task(self, identifier, channel_username=None):
         logging.error(f"Error in invite_task: {str(e)}")
         log_invite(
             task_id=self.request.id,
-            account_name=account.get('name', 'unknown'),
+            account_name=account['name'] if account else 'unknown',
             channel_username=channel_username,
             identifier=identifier,
             status='failed',
