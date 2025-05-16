@@ -112,4 +112,4 @@ const path = require('path');
   console.log('✅ Debug run completed successfully');
   await browser.close();
 })();
-	// 9. Прост
+	// 9. чё ты сука э
