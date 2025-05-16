@@ -6,16 +6,21 @@ from typing import Set, List, Optional
 from telethon import TelegramClient
 from telethon.tl.functions.messages import GetHistoryRequest
 from telethon.tl.types import User, Channel, Chat, Message
+import redis
 
 # Настройка логгера
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+REDIS_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
+redis_client = redis.Redis.from_url(REDIS_URL)
+
 class GroupParser:
-    def __init__(self, client: TelegramClient):
+    def __init__(self, client: TelegramClient, task_id: str = 'default'):
         self.client = client
         self.unique_ids: Set[str] = set()
         self.bot_ids: Set[str] = set()
+        self.task_id = task_id
         
     async def is_bot(self, user: User) -> bool:
         """Проверяет, является ли пользователь ботом"""
@@ -32,7 +37,12 @@ class GroupParser:
         offset_id = 0
         total_messages = 0
         total_usernames = 0
-
+        print('=== ПАРСЕР ЗАПУЩЕН ===')
+        redis_client.hset(f'parse_status:{self.task_id}', mapping={
+            'status': 'in_progress',
+            'progress': 0,
+            'total': 0
+        })
         while True:
             try:
                 history = await self.client(GetHistoryRequest(
@@ -61,6 +71,12 @@ class GroupParser:
                                 self.unique_ids.add(username)
                                 total_usernames += 1
                                 logger.info(f"Найден новый username: {username}")
+                                # Обновляем прогресс
+                                progress = int(100 * total_usernames / limit)
+                                redis_client.hset(f'parse_status:{self.task_id}', mapping={
+                                    'progress': min(progress, 100),
+                                    'total': total_usernames
+                                })
 
                 total_messages += len(messages)
                 logger.info(f"Обработано сообщений: {total_messages}, найдено username'ов: {total_usernames}")
@@ -71,7 +87,12 @@ class GroupParser:
             except Exception as e:
                 logger.error(f"Ошибка при парсинге сообщений: {str(e)}")
                 break
-
+        # Завершаем статус
+        redis_client.hset(f'parse_status:{self.task_id}', mapping={
+            'status': 'completed',
+            'progress': 100,
+            'total': total_usernames
+        })
         return list(self.unique_ids)
 
     async def parse_group(self, group_link: str, limit: int = 100) -> List[str]:
@@ -99,7 +120,7 @@ class GroupParser:
             logger.error(f"Ошибка при парсинге группы: {str(e)}")
             raise
 
-async def parse_group_with_account(group_link: str, limit: int, account_config: dict) -> List[str]:
+async def parse_group_with_account(group_link: str, limit: int, account_config: dict, task_id: str = 'default') -> List[str]:
     """Функция для парсинга группы с использованием указанного аккаунта"""
     try:
         client = TelegramClient(
@@ -109,7 +130,7 @@ async def parse_group_with_account(group_link: str, limit: int, account_config: 
         )
         
         await client.start()
-        parser = GroupParser(client)
+        parser = GroupParser(client, task_id)
         usernames = await parser.parse_group(group_link, limit)
         await client.disconnect()
         
@@ -117,4 +138,11 @@ async def parse_group_with_account(group_link: str, limit: int, account_config: 
         
     except Exception as e:
         logger.error(f"Ошибка при работе с аккаунтом: {str(e)}")
+        # В случае ошибки обновляем статус
+        redis_client.hset(f'parse_status:{task_id}', mapping={
+            'status': 'error',
+            'progress': 0,
+            'total': 0,
+            'error': str(e)
+        })
         raise 
