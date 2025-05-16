@@ -41,133 +41,66 @@ def get_db_conn():
 
 
 @app.task(bind=True, max_retries=3)
-def invite_task(self, phone: str):
-    """Приглашает номер в канал или шлёт ссылку, затем делает паузу."""
-    # Каждый вызов читает свежий config.json
-    cfg_path = os.path.join(os.path.dirname(__file__), 'config.json')
-    with open(cfg_path, 'r', encoding='utf-8') as f:
-        config = __import__('json').load(f)
-
-    channel     = config['channel_username']
-    failure_msg = config['failure_message'].replace('{{channel}}', channel)
-    only_message_bot   = config.get('only_message_bot', False)
-    invite_and_message = config.get('invite_and_message', False)
-    accounts    = [a for a in config.get('accounts', []) if a.get('is_active')]
-    if not accounts:
-        raise RuntimeError('Нет активных аккаунтов в config.json')
-
-    # 1) Пропуск, если уже приглашали
-    conn = get_db_conn()
+def invite_task(self, identifier, channel_username=None):
+    """
+    Задача приглашения пользователя в канал
+    :param identifier: Номер телефона или username пользователя
+    :param channel_username: Имя канала (если не указано, берется из конфига)
+    """
     try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT 1 FROM invite_logs WHERE phone=%s AND channel_username=%s AND status='invited' LIMIT 1",
-                (phone, channel)
+        # Получаем настройки из конфига
+        if not channel_username:
+            channel_username = config.get('channel_username')
+        if not channel_username:
+            raise ValueError("Channel username not configured")
+
+        # Определяем тип идентификатора (телефон или username)
+        is_phone = identifier.replace('+', '').isdigit()
+        
+        # Получаем аккаунт для работы
+        account = get_next_account()
+        if not account:
+            raise ValueError("No available accounts")
+
+        # Создаем клиент
+        client = TelegramClient(
+            account['session_file'],
+            account['api_id'],
+            account['api_hash']
+        )
+
+        try:
+            client.start()
+            
+            if is_phone:
+                # Логика для номера телефона
+                result = client.invite_to_channel(channel_username, [identifier])
+            else:
+                # Логика для username
+                user = client.get_entity(identifier)
+                result = client.invite_to_channel(channel_username, [user])
+
+            # Логируем результат
+            log_invite(
+                task_id=self.request.id,
+                account_name=account['name'],
+                channel_username=channel_username,
+                identifier=identifier,
+                status='invited' if result else 'failed',
+                reason='' if result else 'Unknown error'
             )
-            if cur.fetchone():
-                logger.info(f"[{self.request.id}] {phone}@{channel} — уже приглашён, skipped")
-                cur.execute(
-                    "INSERT INTO invite_logs "
-                    "(task_id, account_name, channel_username, phone, status) "
-                    "VALUES (%s,%s,%s,%s,'skipped')",
-                    (self.request.id, '', channel, phone)
-                )
-                conn.commit()
-                return {'status': 'skipped'}
-    finally:
-        conn.close()
 
-    # 2) Выбираем аккаунт
-    acct = random.choice(accounts)
-    client = TelegramClient(acct['session_file'], acct['api_id'], acct['api_hash'])
-    client.start()
-    logger.info(f"[{self.request.id}] Start invite_task: phone={phone}, channel={channel}, account={acct['name']}")
+        finally:
+            client.disconnect()
 
-    status = 'failed'
-    reason = None
-
-    try:
-        # 3) Импорт контакта
-        res = client(ImportContactsRequest([
-            InputPhoneContact(client_id=0, phone=phone, first_name=phone, last_name='')
-        ]))
-        imported = getattr(res, 'imported', [])
-        users    = getattr(res, 'users', [])
-        logger.info(f"[{self.request.id}] ImportContacts: imported={len(imported)}, users={len(users)}")
-
-        if not imported and not users:
-            status, reason = 'failed', 'not_telegram_user'
-        else:
-            user_id = imported[0].user_id if imported else users[0].id
-
-            # 4) Пауза перед Invite
-            pause_before = random.uniform(
-                config.get('pause_min_seconds', 1),
-                config.get('pause_max_seconds', 3)
-            )
-            logger.info(f"[{self.request.id}] Пауза перед действием: {pause_before:.1f}s")
-            time.sleep(pause_before)
-
-            # 5) Выбор логики действия
-            try:
-                if only_message_bot:
-                    logger.info(f"[{self.request.id}] Только сообщение без приглашения")
-                    link = client(ExportChatInviteRequest(channel)).link
-                    client.send_message(user_id, f"{failure_msg}\n{link}")
-                    status = 'link_sent'
-
-                elif invite_and_message:
-                    logger.info(f"[{self.request.id}] Приглашение и сообщение")
-                    client(InviteToChannelRequest(channel, [user_id]))
-                    status = 'invited'
-                    link = client(ExportChatInviteRequest(channel)).link
-                    client.send_message(user_id, f"{failure_msg}\n{link}")
-
-                else:
-                    logger.info(f"[{self.request.id}] Приглашение, если ошибка — сообщение")
-                    try:
-                        client(InviteToChannelRequest(channel, [user_id]))
-                        status = 'invited'
-                    except (UserPrivacyRestrictedError, UserNotMutualContactError):
-                        link = client(ExportChatInviteRequest(channel)).link
-                        client.send_message(user_id, f"{failure_msg}\n{link}")
-                        status = 'link_sent'
-
-            except FloodWaitError as e:
-                logger.warning(f"[{self.request.id}] FloodWait {e.seconds}s")
-                raise self.retry(countdown=e.seconds)
-            except PeerFloodError as e:
-                wait = random.uniform(3600, 7200)
-                logger.warning(f"[{self.request.id}] PeerFloodError, жду {wait:.1f}s")
-                raise self.retry(countdown=wait)
-
-            # 6) Удаление контакта
-            client(DeleteContactsRequest(id=[user_id]))
-            logger.info(f"[{self.request.id}] Контакт удалён")
-
-    finally:
-        client.disconnect()
-        logger.info(f"[{self.request.id}] Завершено invite_task")
-
-    # 7) Логируем в БД
-    conn = get_db_conn()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO invite_logs "
-                "(task_id, account_name, channel_username, phone, status, reason) "
-                "VALUES (%s,%s,%s,%s,%s,%s)",
-                (self.request.id, acct['name'], channel, phone, status, reason)
-            )
-            conn.commit()
-    finally:
-        conn.close()
-
-    # 8) Пауза между задачами
-    pause_min = config.get('pause_min_seconds', 1)
-    pause_max = config.get('pause_max_seconds', 3)
-    delay = random.uniform(pause_min, pause_max)
-    logger.info(f"[{self.request.id}] Пауза между задачами: {delay:.1f}s")
-    time.sleep(delay)
-
-    return {'status': status, 'reason': reason}
+    except Exception as e:
+        logging.error(f"Error in invite_task: {str(e)}")
+        log_invite(
+            task_id=self.request.id,
+            account_name=account.get('name', 'unknown'),
+            channel_username=channel_username,
+            identifier=identifier,
+            status='failed',
+            reason=str(e)
+        )
+        raise

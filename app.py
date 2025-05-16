@@ -256,8 +256,11 @@ def api_accounts():
 # --- Parser endpoints ---
 @app.route('/parser', methods=['GET'])
 def parser_page():
-    """Страница с интерфейсом парсера"""
     return render_template('parser.html')
+
+@app.route('/bulk_invite', methods=['GET'])
+def bulk_invite_page():
+    return render_template('bulk_invite.html')
 
 @app.route('/api/parse', methods=['POST'])
 def start_parsing():

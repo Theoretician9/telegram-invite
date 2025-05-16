@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Массовое приглашение</h2>
+    
+    <div class="card mt-4">
+        <div class="card-body">
+            <form id="bulkInviteForm">
+                <div class="mb-3">
+                    <label for="file" class="form-label">Файл с ID пользователей</label>
+                    <input type="file" class="form-control" id="file" accept=".txt" required>
+                    <div class="form-text">Загрузите .txt файл с ID пользователей (по одному на строку)</div>
+                </div>
+                
+                <button type="submit" class="btn btn-primary" id="startButton">
+                    Начать приглашение
+                </button>
+            </form>
+        </div>
+    </div>
+    
+    <div class="card mt-4" id="progressCard" style="display: none;">
+        <div class="card-body">
+            <h5 class="card-title">Прогресс</h5>
+            <div class="progress mb-3">
+                <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+            </div>
+            <div id="statusText">Подготовка к приглашению...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('bulkInviteForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fileInput = document.getElementById('file');
+    const startButton = document.getElementById('startButton');
+    const progressCard = document.getElementById('progressCard');
+    
+    if (!fileInput.files.length) {
+        alert('Пожалуйста, выберите файл');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    
+    startButton.disabled = true;
+    progressCard.style.display = 'block';
+    
+    try {
+        const response = await fetch('/api/bulk_invite', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            alert(`Успешно добавлено ${data.count} задач в очередь`);
+            // Начинаем мониторинг очереди
+            startQueueMonitoring();
+        } else {
+            throw new Error(data.error || 'Ошибка при загрузке файла');
+        }
+    } catch (error) {
+        alert(error.message);
+        startButton.disabled = false;
+        progressCard.style.display = 'none';
+    }
+});
+
+function startQueueMonitoring() {
+    const progressBar = document.querySelector('.progress-bar');
+    const statusText = document.getElementById('statusText');
+    
+    const poll = async () => {
+        try {
+            const response = await fetch('/api/queue_length');
+            const data = await response.json();
+            
+            if (data.queue_length > 0) {
+                statusText.textContent = `В очереди: ${data.queue_length} задач`;
+                // Обновляем прогресс-бар на основе длины очереди
+                const statsResponse = await fetch('/api/stats');
+                const stats = await statsResponse.json();
+                const total = stats.invited + stats.failed + stats.skipped + data.queue_length;
+                const progress = ((stats.invited + stats.failed + stats.skipped) / total) * 100;
+                progressBar.style.width = `${progress}%`;
+                setTimeout(poll, 1000);
+            } else {
+                progressBar.style.width = '100%';
+                statusText.textContent = 'Все задачи обработаны';
+            }
+        } catch (error) {
+            statusText.textContent = 'Ошибка при получении статуса';
+            console.error(error);
+        }
+    };
+    
+    poll();
+}
+</script>
+{% endblock %} 
