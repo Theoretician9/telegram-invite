@@ -48,19 +48,18 @@
 </div>
 
 <script>
+let currentTaskId = null;
+
 document.getElementById('parserForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    
     const groupLink = document.getElementById('groupLink').value;
     const limit = document.getElementById('limit').value;
     const startButton = document.getElementById('startButton');
     const progressCard = document.getElementById('progressCard');
     const resultsCard = document.getElementById('resultsCard');
-    
     startButton.disabled = true;
     progressCard.style.display = 'block';
     resultsCard.style.display = 'none';
-    
     try {
         const response = await fetch('/api/parse', {
             method: 'POST',
@@ -72,10 +71,9 @@ document.getElementById('parserForm').addEventListener('submit', async (e) => {
                 limit: parseInt(limit)
             })
         });
-        
         const data = await response.json();
-        
         if (response.ok) {
+            currentTaskId = data.task_id;
             startPolling();
         } else {
             throw new Error(data.error || 'Ошибка при запуске парсинга');
@@ -92,12 +90,10 @@ function startPolling() {
     const statusText = document.getElementById('statusText');
     const resultsText = document.getElementById('resultsText');
     const downloadButton = document.getElementById('downloadButton');
-    
     const poll = async () => {
         try {
-            const response = await fetch('/api/parse/status');
+            const response = await fetch(`/api/parse/status?task_id=${currentTaskId}`);
             const data = await response.json();
-            
             if (data.status === 'completed') {
                 progressBar.style.width = '100%';
                 statusText.textContent = 'Парсинг завершен';
@@ -105,17 +101,21 @@ function startPolling() {
                 downloadButton.style.display = 'block';
                 return;
             }
-            
-            progressBar.style.width = `${data.progress}%`;
-            statusText.textContent = `Прогресс: ${data.progress}%`;
-            
+            if (data.status === 'error') {
+                progressBar.style.width = '0%';
+                statusText.textContent = 'Ошибка: ' + (data.error || 'Неизвестная ошибка');
+                resultsText.textContent = '';
+                downloadButton.style.display = 'none';
+                return;
+            }
+            progressBar.style.width = `${data.progress || 0}%`;
+            statusText.textContent = `Прогресс: ${data.progress || 0}%`;
             setTimeout(poll, 1000);
         } catch (error) {
             statusText.textContent = 'Ошибка при получении статуса';
             console.error(error);
         }
     };
-    
     poll();
 }
 
