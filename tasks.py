@@ -122,14 +122,31 @@ def invite_task(self, identifier, channel_username=None):
 
         try:
             client.start()
-            
+            from telethon.tl.functions.channels import InviteToChannelRequest
+            from telethon.tl.functions.contacts import ImportContactsRequest, DeleteContactsRequest
+            from telethon.tl.types import InputPhoneContact
+
             if is_phone:
-                # Логика для номера телефона
-                result = client.invite_to_channel(channel_username, [identifier])
+                # Импортируем контакт по номеру телефона
+                contact = InputPhoneContact(client_id=0, phone=identifier, first_name="User", last_name="")
+                imported = client(ImportContactsRequest([contact]))
+                user = imported.users[0] if imported.users else None
+                if not user:
+                    raise Exception("User not found by phone")
+                # Приглашаем пользователя в канал
+                result = client(InviteToChannelRequest(
+                    channel=channel_username,
+                    users=[user]
+                ))
+                # Удаляем контакт после приглашения
+                client(DeleteContactsRequest(id=[user.id]))
             else:
-                # Логика для username
+                # Получаем entity по username
                 user = client.get_entity(identifier)
-                result = client.invite_to_channel(channel_username, [user])
+                result = client(InviteToChannelRequest(
+                    channel=channel_username,
+                    users=[user]
+                ))
 
             # Логируем результат
             log_invite(
@@ -137,8 +154,8 @@ def invite_task(self, identifier, channel_username=None):
                 account_name=account['name'],
                 channel_username=channel_username,
                 identifier=identifier,
-                status='invited' if result else 'failed',
-                reason='' if result else 'Unknown error'
+                status='invited',
+                reason=''
             )
 
         finally:
