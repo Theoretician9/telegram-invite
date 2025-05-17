@@ -100,7 +100,7 @@ def logout():
 def index():
     if not session.get('authenticated'):
         return redirect(url_for('login'))
-    return redirect(url_for('stats'))
+    return redirect(url_for('admin_panel'))
 
 # --- Stats page ---
 @app.route('/stats')
