@@ -1,0 +1,17 @@
+[Unit]
+Description=Telegram Inviter Flask Service
+After=network.target
+
+[Service]
+User=admin
+Group=admin
+WorkingDirectory=/home/admin/telegram_invite
+Environment="PATH=/home/admin/telegram_invite/venv/bin"
+Environment="ADMIN_USERNAME=admin"
+Environment="ADMIN_PASSWORD=your_secure_password"
+Environment="FLASK_SECRET=your_secure_secret"
+ExecStart=/home/admin/telegram_invite/venv/bin/python app.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target 

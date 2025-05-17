@@ -1,0 +1,14 @@
+[Unit]
+Description=Telegram Inviter Celery Service
+After=network.target
+
+[Service]
+User=admin
+Group=admin
+WorkingDirectory=/home/admin/telegram_invite
+Environment="PATH=/home/admin/telegram_invite/venv/bin"
+ExecStart=/home/admin/telegram_invite/venv/bin/celery -A celery_app worker --loglevel=info
+Restart=always
+
+[Install]
+WantedBy=multi-user.target 
