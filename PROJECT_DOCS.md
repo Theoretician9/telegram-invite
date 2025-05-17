@@ -304,4 +304,22 @@ sudo systemctl reload nginx
 5. Сгенерировать миграцию: `alembic revision --autogenerate -m "init accounts and limits"`
 6. Применить миграцию: `alembic upgrade head`
 
---- 
+## Recent Updates
+- Added endpoint `/api/accounts/add` to save account details after QR authorization.
+- Updated JS on `/admin/accounts` page to send account data to the backend and display the list of accounts.
+- Updated endpoint `/api/accounts` to return the list of accounts from the database.
+- Fixed issues with missing Python libraries (Pillow and qrcode) causing 502 Bad Gateway errors.
+
+## Setup Instructions
+1. Install the required Python packages:
+   ```bash
+   pip install pillow qrcode[pil]
+   ```
+2. Ensure the Flask service is running:
+   ```bash
+   sudo systemctl restart telegram_inviter_flask.service
+   ```
+
+## API Endpoints
+- `POST /api/accounts/add`: Save account details after QR authorization.
+- `GET /api/accounts`: Retrieve the list of accounts from the database. 

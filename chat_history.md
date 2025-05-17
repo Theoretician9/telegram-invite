@@ -98,4 +98,20 @@
 
 ---
 
-*Файл сформирован автоматически на основе истории чата между пользователем и ассистентом по проекту Telegram Invite.* 
+*Файл сформирован автоматически на основе истории чата между пользователем и ассистентом по проекту Telegram Invite.*
+
+## 2023-10-01
+- Initial project setup and configuration.
+
+## 2023-10-02
+- Added QR login functionality for Telegram accounts.
+- Implemented QR code generation and polling for login status.
+
+## 2023-10-03
+- Added endpoint `/api/accounts/add` to save account details after QR authorization.
+- Updated JS on `/admin/accounts` page to send account data to the backend and display the list of accounts.
+- Updated endpoint `/api/accounts` to return the list of accounts from the database.
+
+## 2023-10-04
+- Fixed issues with missing Python libraries (Pillow and qrcode) causing 502 Bad Gateway errors.
+- Ensured the Flask service is running correctly after installing the required dependencies. 
