@@ -71,12 +71,12 @@ class GroupParser:
                                 self.unique_ids.add(username)
                                 total_usernames += 1
                                 logger.info(f"Найден новый username: {username}")
-                                # Обновляем прогресс
-                                progress = int(100 * total_usernames / limit)
-                                redis_client.hset(f'parse_status:{self.task_id}', mapping={
-                                    'progress': min(progress, 100),
-                                    'total': total_usernames
-                                })
+                    # Обновляем прогресс после каждой итерации
+                    progress = int(100 * min(total_usernames, limit) / limit)
+                    redis_client.hset(f'parse_status:{self.task_id}', mapping={
+                        'progress': progress,
+                        'total': total_usernames
+                    })
 
                 total_messages += len(messages)
                 logger.info(f"Обработано сообщений: {total_messages}, найдено username'ов: {total_usernames}")
