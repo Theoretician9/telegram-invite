@@ -48,9 +48,10 @@ app.config['SESSION_TYPE'] = 'redis'
 app.config['SESSION_REDIS'] = redis.from_url(BROKER_URL)
 app.config['SESSION_PERMANENT'] = True
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=1)
-app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_SECURE'] = False
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_USE_SIGNER'] = True
 
 Session(app)
 
@@ -71,14 +72,18 @@ def login():
         username = request.form.get('username')
         password = request.form.get('password')
         
+        logging.info(f"Login attempt: username={username}")
+        
         # Здесь должна быть проверка учетных данных
         # В данном примере используем простую проверку
         if username == os.getenv('ADMIN_USERNAME', 'admin') and \
            password == os.getenv('ADMIN_PASSWORD', 'admin'):
             session['authenticated'] = True
+            logging.info(f"Login successful for user: {username}")
             flash('Вы успешно вошли в систему', 'success')
             return redirect(url_for('admin_panel'))
         else:
+            logging.warning(f"Login failed for user: {username}")
             flash('Неверное имя пользователя или пароль', 'danger')
     
     return render_template('login.html')
