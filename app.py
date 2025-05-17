@@ -450,7 +450,7 @@ def admin_accounts():
     return render_template('admin/accounts.html')
 
 @app.route('/api/accounts/qr_login', methods=['POST'])
-async def api_qr_login():
+def api_qr_login():
     data = request.get_json()
     api_id = data.get('api_id')
     api_hash = data.get('api_hash')
@@ -459,7 +459,7 @@ async def api_qr_login():
         return jsonify({'error': 'api_id and api_hash required'}), 400
         
     try:
-        qr_code, token = await generate_qr_login(api_id, api_hash)
+        qr_code, token = asyncio.run(generate_qr_login(api_id, api_hash))
         return jsonify({
             'status': 'ok',
             'qr_code': qr_code,
@@ -469,9 +469,9 @@ async def api_qr_login():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/accounts/qr_status/<token>', methods=['GET'])
-async def api_qr_status(token):
+def api_qr_status(token):
     try:
-        status = await poll_qr_login(token)
+        status = asyncio.run(poll_qr_login(token))
         return jsonify(status)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
