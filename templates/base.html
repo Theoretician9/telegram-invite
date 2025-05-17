@@ -6,26 +6,109 @@
     <title>Telegram Invite</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
+        body {
+            background: #23272f;
+            color: #e6e6e6;
+            min-height: 100vh;
+        }
         .navbar {
-            margin-bottom: 2rem;
+            background: #181c23 !important;
+            border-bottom: 1px solid #23272f;
         }
         .navbar-brand {
             font-weight: bold;
+            color: #61a0ff !important;
         }
         .nav-link {
-            color: rgba(255,255,255,.85) !important;
+            color: #b0b8c1 !important;
+            transition: color 0.2s;
         }
-        .nav-link:hover {
-            color: #fff !important;
-        }
-        .nav-link.active {
-            color: #fff !important;
+        .nav-link.active, .nav-link:hover {
+            color: #61a0ff !important;
             font-weight: bold;
+        }
+        .card {
+            background: #23272f;
+            border: 1px solid #323846;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+            color: #e6e6e6;
+        }
+        .card-header {
+            background: #181c23;
+            border-bottom: 1px solid #323846;
+            color: #61a0ff;
+        }
+        .form-control, .form-select {
+            background: #181c23;
+            color: #e6e6e6;
+            border: 1px solid #323846;
+        }
+        .form-control:focus, .form-select:focus {
+            background: #23272f;
+            color: #fff;
+            border-color: #61a0ff;
+            box-shadow: 0 0 0 0.2rem rgba(97,160,255,.15);
+        }
+        .btn-primary {
+            background: #2563eb;
+            border: none;
+        }
+        .btn-primary:hover, .btn-primary:focus {
+            background: #1d4ed8;
+        }
+        .btn-secondary {
+            background: #323846;
+            color: #e6e6e6;
+            border: none;
+        }
+        .btn-secondary:hover, .btn-secondary:focus {
+            background: #23272f;
+            color: #61a0ff;
+        }
+        .table {
+            color: #e6e6e6;
+            background: #23272f;
+        }
+        .table th, .table td {
+            border-color: #323846;
+        }
+        .alert {
+            border-radius: 0.5rem;
+        }
+        .alert-success {
+            background: #1e3a2a;
+            color: #a7f3d0;
+            border-color: #047857;
+        }
+        .alert-danger {
+            background: #3b1d1d;
+            color: #fecaca;
+            border-color: #dc2626;
+        }
+        .alert-warning {
+            background: #3b2f1d;
+            color: #fde68a;
+            border-color: #f59e42;
+        }
+        .alert-info {
+            background: #1e3a5a;
+            color: #bae6fd;
+            border-color: #2563eb;
+        }
+        ::selection {
+            background: #2563eb;
+            color: #fff;
+        }
+        a {
+            color: #61a0ff;
+        }
+        a:hover {
+            color: #2563eb;
         }
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <nav class="navbar navbar-expand-lg navbar-dark">
         <div class="container">
             <a class="navbar-brand" href="/">Telegram Invite</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
@@ -35,19 +118,16 @@
                 <ul class="navbar-nav me-auto">
                     {% if session.get('authenticated') %}
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'admin' %}active{% endif %}" href="/admin">Админ-панель</a>
+                            <a class="nav-link {% if request.endpoint == 'stats' %}active{% endif %}" href="/stats">Статистика</a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'view_logs' %}active{% endif %}" href="/logs">Логи</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'parser' %}active{% endif %}" href="/parser">Парсер</a>
+                            <a class="nav-link {% if request.endpoint == 'parser_page' %}active{% endif %}" href="/parser">Парсер</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'bulk_invite' %}active{% endif %}" href="/bulk_invite">Массовое приглашение</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'stats' %}active{% endif %}" href="/stats">Статистика</a>
+                            <a class="nav-link {% if request.endpoint == 'bulk_invite_page' %}active{% endif %}" href="/bulk_invite">Массовое приглашение</a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'admin_panel' %}active{% endif %}" href="/admin_panel">Настройки</a>

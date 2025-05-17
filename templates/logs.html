@@ -1,27 +1,31 @@
-<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <title>Logs</title>
-  <style>
-    body { font-family: monospace; padding: 2rem; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #ccc; padding: 0.5rem; }
-    th { background: #eee; }
-  </style>
-</head>
-<body>
-  <h1>Последние логи</h1>
-  <table>
-    <tr><th>Время</th><th>Уровень</th><th>Сообщение</th></tr>
-    {% for ts, level, msg in entries %}
-      <tr>
-        <td>{{ ts }}</td>
-        <td>{{ level }}</td>
-        <td>{{ msg }}</td>
-      </tr>
-    {% endfor %}
-  </table>
-  <p><a href="{{ url_for('admin_panel') }}">← Назад к настройкам</a></p>
-</body>
-</html>
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4">
+    <h1 class="mb-4">Последние логи</h1>
+    <div class="card shadow-lg">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-dark table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>Время</th>
+                            <th>Уровень</th>
+                            <th>Сообщение</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ts, level, msg in entries %}
+                        <tr>
+                            <td>{{ ts }}</td>
+                            <td>{{ level }}</td>
+                            <td>{{ msg }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <a href="{{ url_for('admin_panel') }}" class="btn btn-secondary mt-3">← Назад к настройкам</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,55 +1,46 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container">
+<div class="container py-4">
     <h1 class="mb-4">Админ-панель</h1>
-    
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
             {% for category, msg in messages %}
-                <div class="alert alert-{{ category }}">{{ msg }}</div>
+                <div class="alert alert-{{ category }} mb-3">{{ msg }}</div>
             {% endfor %}
         {% endif %}
     {% endwith %}
-
-    <div class="card">
+    <div class="card shadow-lg">
         <div class="card-body">
             <form method="post">
                 <div class="mb-3">
                     <label class="form-label">Channel username (без @):</label>
                     <input type="text" class="form-control" name="channel_username" value="{{ config.channel_username }}">
                 </div>
-
                 <div class="mb-3">
                     <label class="form-label">Failure message ({{'{{channel}}'}} заменится на имя канала):</label>
                     <textarea class="form-control" name="failure_message" rows="4">{{ config.failure_message }}</textarea>
                 </div>
-
                 <div class="mb-3">
                     <label class="form-label" for="queue_threshold">Порог длины очереди:</label>
                     <input type="number" class="form-control" id="queue_threshold" name="queue_threshold" value="{{ config.queue_threshold }}">
                 </div>
-
                 <div class="mb-3">
                     <label class="form-label" for="pause_min_seconds">Минимальная пауза (сек):</label>
                     <input type="number" class="form-control" id="pause_min_seconds" name="pause_min_seconds" value="{{ config.pause_min_seconds }}">
                 </div>
-
                 <div class="mb-3">
                     <label class="form-label" for="pause_max_seconds">Максимальная пауза (сек):</label>
                     <input type="number" class="form-control" id="pause_max_seconds" name="pause_max_seconds" value="{{ config.pause_max_seconds }}">
                 </div>
-
                 <div class="mb-3 form-check form-switch">
                     <input type="checkbox" class="form-check-input" id="only_message_bot" name="only_message_bot" {% if config.only_message_bot %}checked{% endif %}>
                     <label class="form-check-label" for="only_message_bot">Только сообщение боту (не приглашать в канал)</label>
                 </div>
-
                 <div class="mb-3 form-check form-switch">
                     <input type="checkbox" class="form-check-input" id="invite_and_message" name="invite_and_message" {% if config.invite_and_message %}checked{% endif %}>
                     <label class="form-check-label" for="invite_and_message">Приглашать в канал и отправлять сообщение</label>
                 </div>
-
                 <button type="submit" class="btn btn-primary">Сохранить</button>
             </form>
         </div>
