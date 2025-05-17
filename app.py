@@ -255,16 +255,23 @@ def api_logs_csv():
 # --- Accounts endpoint ---
 @app.route('/api/accounts', methods=['GET'])
 def api_accounts():
-    conn = mysql.connector.connect(
-        host=DB_HOST, user=DB_USER,
-        password=DB_PASSWORD, database=DB_NAME
-    )
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT name, last_used, invites_left FROM accounts")
-    rows = cursor.fetchall()
-    cursor.close()
-    conn.close()
-    return jsonify(rows)
+    db = SessionLocal()
+    try:
+        accounts = db.query(Account).all()
+        result = []
+        for acc in accounts:
+            result.append({
+                'id': acc.id,
+                'name': acc.name,
+                'phone': '',  # phone не хранится явно, можно добавить если нужно
+                'comment': acc.comment,
+                'is_active': acc.is_active,
+                'last_used': acc.last_used.isoformat() if acc.last_used else None,
+                'created_at': acc.created_at.isoformat() if acc.created_at else None
+            })
+        return jsonify(result)
+    finally:
+        db.close()
 
 # --- Parser endpoints ---
 @app.route('/api/parse', methods=['POST'])
