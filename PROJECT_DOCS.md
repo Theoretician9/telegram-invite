@@ -272,4 +272,36 @@ sudo systemctl reload nginx
 - `deploy/nginx/telegram_invite.conf` — добавлены location для bulk_invite.
 - `app.py` — добавлен API для invite_log, улучшена обработка bulk invite.
 - `templates/bulk_invite.html` — добавлен подробный лог, обновлён JS.
-- (Рекомендация) Для задержек между инвайтами требуется дополнительная реализация. 
+- (Рекомендация) Для задержек между инвайтами требуется дополнительная реализация.
+
+## Миграция на мультиаккаунтность и учёт лимитов (июнь 2024)
+
+### Новые таблицы
+- **accounts**: id, name, api_id, api_hash, session_string, is_active, last_used, created_at, comment
+- **account_channel_limits**: id, account_id, channel_username, invites_left, last_invited_at
+- **invite_logs** (расширено): добавлен account_id, channel_username, reason, status, created_at
+
+### Основные изменения
+- Все данные по аккаунтам и лимитам теперь хранятся в БД (MySQL), а не в файлах.
+- Поддержка мультиаккаунтности и учёта лимитов по каждому паблику.
+- Подготовлен Alembic для миграций, создана первая миграция с новыми таблицами.
+- Весь процесс миграции и настройки описан в истории чата (см. chat_history.md).
+
+### Alembic: настройка и миграция
+1. Установить alembic и pymysql: `pip install alembic pymysql`
+2. Инициализировать Alembic: `alembic init alembic`
+3. Настроить строку подключения в alembic.ini:
+   ```
+   sqlalchemy.url = mysql+pymysql://user:password@host/dbname
+   ```
+4. В alembic/env.py добавить:
+   ```python
+   import sys, os
+   sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+   from models import Base
+   target_metadata = Base.metadata
+   ```
+5. Сгенерировать миграцию: `alembic revision --autogenerate -m "init accounts and limits"`
+6. Применить миграцию: `alembic upgrade head`
+
+--- 
