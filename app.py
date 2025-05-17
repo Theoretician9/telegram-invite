@@ -445,5 +445,9 @@ def api_add_account():
     finally:
         db.close()
 
+@app.route('/admin/accounts')
+def admin_accounts():
+    return render_template('admin/accounts.html')
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, threaded=False)
