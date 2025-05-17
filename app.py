@@ -20,6 +20,8 @@ from qr_login import generate_qr_login, poll_qr_login
 from models import Account, AccountChannelLimit, Base
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from hypercorn.config import Config
+from hypercorn.asyncio import serve
 
 # --- Configuration & Logging ---
 BASE_DIR = os.path.dirname(__file__)
@@ -450,7 +452,7 @@ def admin_accounts():
     return render_template('admin/accounts.html')
 
 @app.route('/api/accounts/qr_login', methods=['POST'])
-def api_qr_login():
+async def api_qr_login():
     data = request.get_json()
     api_id = data.get('api_id')
     api_hash = data.get('api_hash')
@@ -459,7 +461,7 @@ def api_qr_login():
         return jsonify({'error': 'api_id and api_hash required'}), 400
         
     try:
-        qr_code, token = generate_qr_login(api_id, api_hash)
+        qr_code, token = await generate_qr_login(api_id, api_hash)
         return jsonify({
             'status': 'ok',
             'qr_code': qr_code,
@@ -469,12 +471,14 @@ def api_qr_login():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/accounts/qr_status/<token>', methods=['GET'])
-def api_qr_status(token):
+async def api_qr_status(token):
     try:
-        status = poll_qr_login(token)
+        status = await poll_qr_login(token)
         return jsonify(status)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, threaded=False)
+    config = Config()
+    config.bind = ["0.0.0.0:5000"]
+    asyncio.run(serve(app, config))
