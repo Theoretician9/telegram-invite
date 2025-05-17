@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Статистика системы</h2>
+    
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Очередь приглашений</h5>
+                </div>
+                <div class="card-body">
+                    <p>Текущая длина очереди: <span id="queue-length">0</span></p>
+                    <p>Порог предупреждения: <span id="queue-threshold">0</span></p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Аккаунты</h5>
+                </div>
+                <div class="card-body">
+                    <div id="accounts-list">
+                        Загрузка...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Последние приглашения</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table" id="invite-log">
+                            <thead>
+                                <tr>
+                                    <th>Телефон</th>
+                                    <th>Статус</th>
+                                    <th>Причина</th>
+                                    <th>Время</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Данные будут загружены через JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function updateStats() {
+    // Обновление длины очереди
+    fetch('/api/logs')
+        .then(response => response.text())
+        .then(text => {
+            const queueLength = (text.match(/Invite-task queue length/g) || []).length;
+            document.getElementById('queue-length').textContent = queueLength;
+        });
+
+    // Обновление списка аккаунтов
+    fetch('/api/accounts')
+        .then(response => response.json())
+        .then(accounts => {
+            const accountsList = document.getElementById('accounts-list');
+            accountsList.innerHTML = accounts.map(acc => `
+                <div class="mb-2">
+                    <strong>${acc.name}</strong><br>
+                    Последнее использование: ${new Date(acc.last_used).toLocaleString()}<br>
+                    Осталось приглашений: ${acc.invites_left}
+                </div>
+            `).join('');
+        });
+
+    // Обновление лога приглашений
+    fetch('/api/invite_log')
+        .then(response => response.json())
+        .then(logs => {
+            const tbody = document.querySelector('#invite-log tbody');
+            tbody.innerHTML = logs.map(log => `
+                <tr>
+                    <td>${log.phone}</td>
+                    <td>${log.status}</td>
+                    <td>${log.reason || '-'}</td>
+                    <td>${new Date(log.created_at).toLocaleString()}</td>
+                </tr>
+            `).join('');
+        });
+}
+
+// Обновление каждые 5 секунд
+setInterval(updateStats, 5000);
+updateStats(); // Первоначальная загрузка
+</script>
+{% endblock %} 

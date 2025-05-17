@@ -98,9 +98,15 @@ def logout():
 # --- Root route ---
 @app.route('/')
 def index():
-    if session.get('authenticated'):
-        return redirect(url_for('admin_panel'))
-    return redirect(url_for('login'))
+    if not session.get('authenticated'):
+        return redirect(url_for('login'))
+    return redirect(url_for('stats'))
+
+# --- Stats page ---
+@app.route('/stats')
+@login_required
+def stats():
+    return render_template('stats.html')
 
 # --- Helper: count only invite_task in Redis queue ---
 def count_invite_tasks():
