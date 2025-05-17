@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4">
+    <h2 class="mb-4">Управление аккаунтами Telegram</h2>
+    <div class="card shadow-lg mb-4">
+        <div class="card-body">
+            <form id="qr-form" class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label for="api_id" class="form-label">API ID</label>
+                    <input type="text" class="form-control" id="api_id" name="api_id" required>
+                </div>
+                <div class="col-md-4">
+                    <label for="api_hash" class="form-label">API Hash</label>
+                    <input type="text" class="form-control" id="api_hash" name="api_hash" required>
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-primary">Подключить аккаунт</button>
+                </div>
+            </form>
+            <div id="qr-block" class="mt-4" style="display:none;">
+                <div class="text-center">
+                    <img id="qr-img" src="" alt="QR-код для входа" style="max-width: 300px; background: #fff; padding: 1rem; border-radius: 1rem;">
+                </div>
+                <div class="text-center mt-3" id="qr-status">Ожидание подтверждения…</div>
+            </div>
+            <div id="qr-success" class="alert alert-success mt-4" style="display:none;"></div>
+        </div>
+    </div>
+    <div class="card shadow-lg">
+        <div class="card-header">
+            <h5 class="card-title mb-0">Список аккаунтов</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-dark table-striped align-middle" id="accounts-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Имя</th>
+                            <th>Телефон</th>
+                            <th>Комментарий</th>
+                            <th>Активен</th>
+                            <th>Последнее использование</th>
+                            <th>Создан</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Данные будут загружены через JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+document.getElementById('qr-form').onsubmit = function(e) {
+    e.preventDefault();
+    const api_id = document.getElementById('api_id').value;
+    const api_hash = document.getElementById('api_hash').value;
+    fetch('/api/accounts/login_qr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_id, api_hash })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.qr && data.token) {
+            document.getElementById('qr-img').src = 'data:image/png;base64,' + data.qr;
+            document.getElementById('qr-block').style.display = '';
+            document.getElementById('qr-success').style.display = 'none';
+            pollQrStatus(data.token);
+        }
+    });
+};
+
+function pollQrStatus(token) {
+    let interval = setInterval(() => {
+        fetch(`/api/accounts/qr_status/${token}`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'authorized') {
+                    document.getElementById('qr-status').textContent = 'Аккаунт успешно подключён!';
+                    document.getElementById('qr-success').style.display = '';
+                    document.getElementById('qr-success').textContent = `Аккаунт @${data.user.username || ''} (${data.user.phone || ''}) успешно добавлен!`;
+                    clearInterval(interval);
+                    // TODO: отправить данные на backend для сохранения аккаунта
+                } else if (data.status === 'error') {
+                    document.getElementById('qr-status').textContent = 'Ошибка: ' + (data.error || 'Неизвестная ошибка');
+                    clearInterval(interval);
+                }
+            });
+    }, 2000);
+}
+</script>
+{% endblock %} 

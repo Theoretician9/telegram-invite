@@ -17,6 +17,9 @@ from functools import wraps
 import csv
 from io import StringIO
 from qr_login import generate_qr_login, poll_qr_login
+from models import Account, AccountChannelLimit, Base
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 # --- Configuration & Logging ---
 BASE_DIR = os.path.dirname(__file__)
@@ -39,6 +42,11 @@ DB_USER = os.getenv('DB_USER', 'telegraminvi')
 DB_PASSWORD = os.getenv('DB_PASSWORD', 'QyA9fWbh56Ln')
 DB_NAME = os.getenv('DB_NAME', 'telegraminvi')
 BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
+
+# SQLAlchemy engine/session для работы с БД
+DB_URL = os.getenv('DB_URL') or 'mysql+pymysql://telegraminvi:QyA9fWbh56Ln@127.0.0.1/telegraminvi'
+engine = create_engine(DB_URL)
+SessionLocal = sessionmaker(bind=engine)
 
 # --- Flask app init ---
 app = Flask(__name__)
@@ -391,6 +399,44 @@ def api_invite_log():
     cursor.close()
     cnx.close()
     return jsonify(logs)
+
+@app.route('/api/accounts/add', methods=['POST'])
+def api_add_account():
+    data = request.get_json()
+    session_string = data.get('session_string')
+    api_id = data.get('api_id')
+    api_hash = data.get('api_hash')
+    username = data.get('username')
+    phone = data.get('phone')
+    comment = data.get('comment', '')
+    name = username or phone or f"tg_{datetime.utcnow().timestamp()}"
+    if not session_string or not api_id or not api_hash:
+        return jsonify({'error': 'session_string, api_id, api_hash required'}), 400
+    db = SessionLocal()
+    try:
+        account = Account(
+            name=name,
+            api_id=api_id,
+            api_hash=api_hash,
+            session_string=session_string,
+            is_active=True,
+            created_at=datetime.utcnow(),
+            comment=comment
+        )
+        db.add(account)
+        db.commit()
+        db.refresh(account)
+        # Создаём лимиты по пабликам (пока пусто, можно добавить дефолтный канал)
+        # Пример: channels = ["@yourchannel"]
+        # for ch in channels:
+        #     db.add(AccountChannelLimit(account_id=account.id, channel_username=ch, invites_left=200))
+        db.commit()
+        return jsonify({'status': 'ok', 'account_id': account.id})
+    except Exception as e:
+        db.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        db.close()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, threaded=False)
