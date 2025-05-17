@@ -449,5 +449,32 @@ def api_add_account():
 def admin_accounts():
     return render_template('admin/accounts.html')
 
+@app.route('/api/accounts/qr_login', methods=['POST'])
+def api_qr_login():
+    data = request.get_json()
+    api_id = data.get('api_id')
+    api_hash = data.get('api_hash')
+    
+    if not api_id or not api_hash:
+        return jsonify({'error': 'api_id and api_hash required'}), 400
+        
+    try:
+        qr_code, token = generate_qr_login(api_id, api_hash)
+        return jsonify({
+            'status': 'ok',
+            'qr_code': qr_code,
+            'token': token
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/accounts/qr_status/<token>', methods=['GET'])
+def api_qr_status(token):
+    try:
+        status = poll_qr_login(token)
+        return jsonify(status)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, threaded=False)
