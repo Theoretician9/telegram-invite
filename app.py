@@ -3,7 +3,7 @@ import json
 import logging
 import asyncio
 from datetime import datetime, timedelta
-from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, send_file
+from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, send_file, session
 import redis
 import mysql.connector
 from tasks import invite_task
@@ -11,6 +11,7 @@ from alerts import send_alert
 from parser import parse_group_with_account
 import uuid
 import glob
+from functools import wraps
 
 import csv
 from io import StringIO
@@ -37,6 +38,53 @@ DB_PASSWORD = os.getenv('DB_PASSWORD', 'QyA9fWbh56Ln')
 DB_NAME = os.getenv('DB_NAME', 'telegraminvi')
 BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
 
+# --- Flask app init ---
+app = Flask(__name__)
+app.secret_key = os.getenv('FLASK_SECRET', 'change-me')
+
+# --- Login required decorator ---
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('authenticated'):
+            flash('Пожалуйста, войдите в систему', 'warning')
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# --- Login route ---
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        # Здесь должна быть проверка учетных данных
+        # В данном примере используем простую проверку
+        if username == os.getenv('ADMIN_USERNAME', 'admin') and \
+           password == os.getenv('ADMIN_PASSWORD', 'admin'):
+            session['authenticated'] = True
+            flash('Вы успешно вошли в систему', 'success')
+            return redirect(url_for('admin_panel'))
+        else:
+            flash('Неверное имя пользователя или пароль', 'danger')
+    
+    return render_template('login.html')
+
+# --- Logout route ---
+@app.route('/logout')
+def logout():
+    session.pop('authenticated', None)
+    flash('Вы вышли из системы', 'info')
+    return redirect(url_for('login'))
+
+# --- Root route ---
+@app.route('/')
+def index():
+    if session.get('authenticated'):
+        return redirect(url_for('admin_panel'))
+    return redirect(url_for('login'))
+
 # --- Helper: count only invite_task in Redis queue ---
 def count_invite_tasks():
     r = redis.Redis.from_url(BROKER_URL)
@@ -51,89 +99,9 @@ def count_invite_tasks():
             continue
     return cnt
 
-# --- Flask app init ---
-app = Flask(__name__)
-app.secret_key = os.getenv('FLASK_SECRET', 'change-me')
-
-# --- Health check ---
-@app.route('/api/health', methods=['GET'])
-def health():
-    return jsonify(status='ok')
-
-# --- Queue length endpoint (only invite_task) ---
-@app.route('/api/queue_length', methods=['GET'])
-def queue_length():
-    return jsonify(queue_length=count_invite_tasks())
-
-# --- Stats endpoint ---
-@app.route('/api/stats', methods=['GET'])
-def stats():
-    stats = {'invited': 0, 'link_sent': 0, 'failed': 0, 'skipped': 0}
-
-    cnx = mysql.connector.connect(
-        host=DB_HOST, port=DB_PORT,
-        user=DB_USER, password=DB_PASSWORD,
-        database=DB_NAME
-    )
-    cursor = cnx.cursor(dictionary=True)
-    cursor.execute("""
-        SELECT status, COUNT(*) AS cnt
-        FROM invite_logs
-        GROUP BY status
-    """)
-    for row in cursor.fetchall():
-        if row['status'] in stats:
-            stats[row['status']] = row['cnt']
-    cursor.close()
-    cnx.close()
-
-    stats['queue_length'] = count_invite_tasks()
-    return jsonify(stats)
-
-# --- Stats history endpoint (Step 18) ---
-@app.route('/api/stats/history', methods=['GET'])
-def stats_history():
-    """
-    ?period=day  — по часу за последние 24 часа
-    ?period=week — по дню за последние 7 дней
-    """
-    period = request.args.get('period', 'day')
-    cnx = mysql.connector.connect(
-        host=DB_HOST, port=DB_PORT,
-        user=DB_USER, password=DB_PASSWORD,
-        database=DB_NAME
-    )
-    cursor = cnx.cursor(dictionary=True)
-    now = datetime.utcnow()
-
-    if period == 'week':
-        start = now - timedelta(days=7)
-        cursor.execute("""
-            SELECT DATE_FORMAT(created_at, '%Y-%m-%d') AS ts, COUNT(*) AS count
-            FROM invite_logs
-            WHERE created_at >= %s
-            GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')
-            ORDER BY ts
-        """, (start,))
-    else:
-        start = now - timedelta(hours=24)
-        cursor.execute("""
-            SELECT DATE_FORMAT(created_at, '%Y-%m-%dT%H:00:00Z') AS ts, COUNT(*) AS count
-            FROM invite_logs
-            WHERE created_at >= %s
-            GROUP BY DATE_FORMAT(created_at, '%Y-%m-%dT%H')
-            ORDER BY ts
-        """, (start,))
-
-    rows = cursor.fetchall()
-    cursor.close()
-    cnx.close()
-
-    data = [{'timestamp': r['ts'], 'count': r['count']} for r in rows]
-    return jsonify(data)
-
 # --- Admin panel ---
 @app.route('/admin', methods=['GET', 'POST'])
+@login_required
 def admin_panel():
     global config
     # Убедимся, что новые ключи всегда есть
@@ -159,6 +127,7 @@ def admin_panel():
 
 # --- Logs viewer (HTML) ---
 @app.route('/logs', methods=['GET'])
+@login_required
 def view_logs():
     entries = []
     if os.path.exists(LOG_PATH):
@@ -172,6 +141,18 @@ def view_logs():
                 msg = ' '.join(parts[3:])
                 entries.append((ts, lvl, msg))
     return render_template('logs.html', entries=entries)
+
+# --- Parser page ---
+@app.route('/parser', methods=['GET'])
+@login_required
+def parser_page():
+    return render_template('parser.html')
+
+# --- Bulk invite page ---
+@app.route('/bulk_invite', methods=['GET'])
+@login_required
+def bulk_invite_page():
+    return render_template('bulk_invite.html')
 
 # --- Webhook handler with immediate alert check ---
 @app.route('/webhook', methods=['GET','POST'], strict_slashes=False)
@@ -254,14 +235,6 @@ def api_accounts():
     return jsonify(rows)
 
 # --- Parser endpoints ---
-@app.route('/parser', methods=['GET'])
-def parser_page():
-    return render_template('parser.html')
-
-@app.route('/bulk_invite', methods=['GET'])
-def bulk_invite_page():
-    return render_template('bulk_invite.html')
-
 @app.route('/api/parse', methods=['POST'])
 def start_parsing():
     """Запуск процесса парсинга"""

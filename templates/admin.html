@@ -1,160 +1,58 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <title>Админ-панель</title>
-  <style>
-    body {
-      background-color: #0f111a;
-      color: #ffffff;
-      font-family: 'Segoe UI', sans-serif;
-      margin: 0;
-      padding: 2rem;
-    }
-    h1 {
-      margin-bottom: 2rem;
-    }
-    .form-group {
-      margin-bottom: 1.5rem;
-    }
-    label {
-      display: block;
-      margin-bottom: 0.5rem;
-      font-weight: bold;
-    }
-    input[type="text"], textarea, input[type="number"] {
-      background-color: #1e2130;
-      color: #ffffff;
-      border: 1px solid #333;
-      border-radius: 5px;
-      padding: 0.75rem;
-      width: 100%;
-      box-sizing: border-box;
-    }
-    textarea {
-      resize: vertical;
-    }
-    .switch {
-      position: relative;
-      display: inline-block;
-      width: 52px;
-      height: 28px;
-    }
-    .switch input {
-      opacity: 0;
-      width: 0;
-      height: 0;
-    }
-    .slider {
-      position: absolute;
-      cursor: pointer;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background-color: #555;
-      transition: .4s;
-      border-radius: 34px;
-    }
-    .slider:before {
-      position: absolute;
-      content: "";
-      height: 20px;
-      width: 20px;
-      left: 4px;
-      bottom: 4px;
-      background-color: white;
-      transition: .4s;
-      border-radius: 50%;
-    }
-    input:checked + .slider {
-      background-color: #4caf50;
-    }
-    input:checked + .slider:before {
-      transform: translateX(24px);
-    }
-    .toggle-label {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 1rem;
-    }
-    .btn {
-      background-color: #4caf50;
-      color: white;
-      padding: 0.75rem 1.5rem;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      font-size: 1rem;
-    }
-    .btn:hover {
-      background-color: #43a047;
-    }
-    .message {
-      margin-bottom: 1rem;
-      color: #66ff66;
-    }
-    a {
-      color: #00bcd4;
-    }
-  </style>
-</head>
-<body>
-  <h1>Админ-панель</h1>
-  {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-      {% for category, msg in messages %}
-        <div class="message">{{ msg }}</div>
-      {% endfor %}
-    {% endif %}
-  {% endwith %}
+{% extends "base.html" %}
 
-  <form method="post">
-    <div class="form-group">
-      <label>Channel username (без @):</label>
-      <input type="text" name="channel_username" value="{{ config.channel_username }}">
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">Админ-панель</h1>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, msg in messages %}
+                <div class="alert alert-{{ category }}">{{ msg }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="card">
+        <div class="card-body">
+            <form method="post">
+                <div class="mb-3">
+                    <label class="form-label">Channel username (без @):</label>
+                    <input type="text" class="form-control" name="channel_username" value="{{ config.channel_username }}">
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Failure message ({{'{{channel}}'}} заменится на имя канала):</label>
+                    <textarea class="form-control" name="failure_message" rows="4">{{ config.failure_message }}</textarea>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="queue_threshold">Порог длины очереди:</label>
+                    <input type="number" class="form-control" id="queue_threshold" name="queue_threshold" value="{{ config.queue_threshold }}">
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="pause_min_seconds">Минимальная пауза (сек):</label>
+                    <input type="number" class="form-control" id="pause_min_seconds" name="pause_min_seconds" value="{{ config.pause_min_seconds }}">
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="pause_max_seconds">Максимальная пауза (сек):</label>
+                    <input type="number" class="form-control" id="pause_max_seconds" name="pause_max_seconds" value="{{ config.pause_max_seconds }}">
+                </div>
+
+                <div class="mb-3 form-check form-switch">
+                    <input type="checkbox" class="form-check-input" id="only_message_bot" name="only_message_bot" {% if config.only_message_bot %}checked{% endif %}>
+                    <label class="form-check-label" for="only_message_bot">Только сообщение боту (не приглашать в канал)</label>
+                </div>
+
+                <div class="mb-3 form-check form-switch">
+                    <input type="checkbox" class="form-check-input" id="invite_and_message" name="invite_and_message" {% if config.invite_and_message %}checked{% endif %}>
+                    <label class="form-check-label" for="invite_and_message">Приглашать в канал и отправлять сообщение</label>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Сохранить</button>
+            </form>
+        </div>
     </div>
-
-    <div class="form-group">
-      <label>Failure message ({{'{{channel}}'}} заменится на имя канала):</label>
-      <textarea name="failure_message" rows="4">{{ config.failure_message }}</textarea>
-    </div>
-
-    <div class="form-group">
-      <label for="queue_threshold">Порог длины очереди:</label>
-      <input type="number" id="queue_threshold" name="queue_threshold" value="{{ config.queue_threshold }}">
-    </div>
-
-    <div class="form-group">
-      <label for="pause_min_seconds">Минимальная пауза (сек):</label>
-      <input type="number" id="pause_min_seconds" name="pause_min_seconds" value="{{ config.pause_min_seconds }}">
-    </div>
-
-    <div class="form-group">
-      <label for="pause_max_seconds">Максимальная пауза (сек):</label>
-      <input type="number" id="pause_max_seconds" name="pause_max_seconds" value="{{ config.pause_max_seconds }}">
-    </div>
-
-    <div class="toggle-label">
-      <span>Только сообщение боту (не приглашать в канал)</span>
-      <label class="switch">
-        <input type="checkbox" name="only_message_bot" {% if config.only_message_bot %}checked{% endif %}>
-        <span class="slider"></span>
-      </label>
-    </div>
-
-    <div class="toggle-label">
-      <span>Приглашать в канал и отправлять сообщение</span>
-      <label class="switch">
-        <input type="checkbox" name="invite_and_message" {% if config.invite_and_message %}checked{% endif %}>
-        <span class="slider"></span>
-      </label>
-    </div>
-
-    <button type="submit" class="btn">Сохранить</button>
-  </form>
-
-  <p><a href="{{ url_for('view_logs') }}">Перейти к логам</a></p>
-</body>
-</html>
+</div>
+{% endblock %}
