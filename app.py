@@ -4,6 +4,7 @@ import logging
 import asyncio
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, send_file, session
+from flask_session import Session
 import redis
 import mysql.connector
 from tasks import invite_task
@@ -41,6 +42,17 @@ BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
 # --- Flask app init ---
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET', 'change-me')
+
+# Настройка сессий
+app.config['SESSION_TYPE'] = 'redis'
+app.config['SESSION_REDIS'] = redis.from_url(BROKER_URL)
+app.config['SESSION_PERMANENT'] = True
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=1)
+app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+
+Session(app)
 
 # --- Login required decorator ---
 def login_required(f):
