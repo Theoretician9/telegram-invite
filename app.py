@@ -16,6 +16,7 @@ from functools import wraps
 
 import csv
 from io import StringIO
+from qr_login import generate_qr_login, poll_qr_login
 
 # --- Configuration & Logging ---
 BASE_DIR = os.path.dirname(__file__)
