@@ -20,8 +20,6 @@ from qr_login import generate_qr_login, poll_qr_login
 from models import Account, AccountChannelLimit, Base
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from hypercorn.config import Config
-from hypercorn.asyncio import serve
 
 # --- Configuration & Logging ---
 BASE_DIR = os.path.dirname(__file__)
@@ -479,6 +477,4 @@ async def api_qr_status(token):
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    config = Config()
-    config.bind = ["0.0.0.0:5000"]
-    asyncio.run(serve(app, config))
+    app.run(host='0.0.0.0', port=5000)
