@@ -46,6 +46,12 @@
                         <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'bulk_invite' %}active{% endif %}" href="/bulk_invite">Массовое приглашение</a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'stats' %}active{% endif %}" href="/stats">Статистика</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'admin_panel' %}active{% endif %}" href="/admin_panel">Настройки</a>
+                        </li>
                     {% endif %}
                 </ul>
                 <ul class="navbar-nav">
