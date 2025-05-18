@@ -114,4 +114,10 @@
 
 ## 2023-10-04
 - Fixed issues with missing Python libraries (Pillow and qrcode) causing 502 Bad Gateway errors.
-- Ensured the Flask service is running correctly after installing the required dependencies. 
+- Ensured the Flask service is running correctly after installing the required dependencies.
+
+## Май 2025: QR-авторизация Telegram-аккаунтов
+- Исправлен возврат base64 PNG для QR-кода, теперь QR-код отображается на странице.
+- Реализована рабочая авторизация через QR-код для аккаунтов без 2FA.
+- Зафиксирован кейс: если на аккаунте включён пароль (2FA), авторизация не завершается, требуется доработка (SessionPasswordNeededError, отдельный ввод пароля).
+- Ошибки при авторизации теперь отображаются на фронте. 

@@ -323,4 +323,11 @@ sudo systemctl reload nginx
 
 ## API Endpoints
 - `POST /api/accounts/add`: Save account details after QR authorization.
-- `GET /api/accounts`: Retrieve the list of accounts from the database. 
+- `GET /api/accounts`: Retrieve the list of accounts from the database.
+
+## Обновления (май 2025)
+- Реализована авторизация Telegram-аккаунта через QR-код (Telethon).
+- Исправлен возврат base64 PNG для QR-кода, теперь QR корректно отображается на фронте.
+- Добавлена обработка ошибок при авторизации (ошибки отображаются на фронте).
+- Зафиксирован кейс: если на аккаунте включена двухфакторная аутентификация (2FA, паролем), авторизация через QR-код требует доработки (обработка SessionPasswordNeededError, отдельный ввод пароля).
+- Для аккаунтов без 2FA авторизация работает полностью. 
