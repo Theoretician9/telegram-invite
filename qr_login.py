@@ -33,7 +33,7 @@ async def generate_qr_login(api_id, api_hash):
         'session_string': None,
         'user': None
     }
-    return token, qr_b64
+    return qr_b64, token
 
 async def poll_qr_login(token):
     session = QR_SESSIONS.get(token)
