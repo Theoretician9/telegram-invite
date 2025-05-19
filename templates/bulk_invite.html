@@ -13,11 +13,27 @@
                 <button type="submit" class="btn btn-primary">Загрузить и запустить</button>
             </form>
             <div id="bulk-invite-status" class="mt-3"></div>
+            <!-- Progress bar -->
+            <div id="progress-container" class="mt-3" style="display: none;">
+                <div class="d-flex justify-content-between mb-2">
+                    <span id="progress-text">Прогресс: 0/0</span>
+                    <span id="progress-percentage">0%</span>
+                </div>
+                <div class="progress">
+                    <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" 
+                         role="progressbar" style="width: 0%"></div>
+                </div>
+            </div>
         </div>
     </div>
     <div class="card shadow-lg">
-        <div class="card-header">
+        <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="card-title mb-0">Подробный лог</h5>
+            <div class="btn-group">
+                <button class="btn btn-sm btn-outline-secondary" onclick="filterLogs('all')">Все</button>
+                <button class="btn btn-sm btn-outline-success" onclick="filterLogs('invited')">Успешно</button>
+                <button class="btn btn-sm btn-outline-danger" onclick="filterLogs('failed')">Ошибки</button>
+            </div>
         </div>
         <div class="card-body">
             <div class="table-responsive">
@@ -39,6 +55,11 @@
     </div>
 </div>
 <script>
+let currentFilter = 'all';
+let lastLogId = 0;
+let totalInvites = 0;
+let completedInvites = 0;
+
 document.getElementById('bulk-invite-form').onsubmit = function(e) {
     e.preventDefault();
     const formData = new FormData(this);
@@ -50,6 +71,11 @@ document.getElementById('bulk-invite-form').onsubmit = function(e) {
     .then(data => {
         if (data.status === 'success') {
             document.getElementById('bulk-invite-status').innerHTML = `<div class='alert alert-success'>${data.message}</div>`;
+            // Show progress bar and reset counters
+            document.getElementById('progress-container').style.display = 'block';
+            totalInvites = data.phones_count;
+            completedInvites = 0;
+            updateProgress();
         } else {
             document.getElementById('bulk-invite-status').innerHTML = `<div class='alert alert-danger'>Ошибка: ${data.error || data.message}</div>`;
         }
@@ -58,22 +84,91 @@ document.getElementById('bulk-invite-form').onsubmit = function(e) {
         document.getElementById('bulk-invite-status').innerHTML = `<div class='alert alert-danger'>Ошибка при загрузке файла</div>`;
     });
 };
+
+function updateProgress() {
+    const percentage = totalInvites > 0 ? Math.round((completedInvites / totalInvites) * 100) : 0;
+    document.getElementById('progress-text').textContent = `Прогресс: ${completedInvites}/${totalInvites}`;
+    document.getElementById('progress-percentage').textContent = `${percentage}%`;
+    document.getElementById('progress-bar').style.width = `${percentage}%`;
+}
+
+function getStatusClass(status) {
+    switch(status) {
+        case 'invited': return 'text-success';
+        case 'failed': return 'text-danger';
+        default: return 'text-warning';
+    }
+}
+
+function filterLogs(filter) {
+    currentFilter = filter;
+    const rows = document.querySelectorAll('#invite-log tbody tr');
+    rows.forEach(row => {
+        const status = row.querySelector('td:nth-child(2)').textContent;
+        if (filter === 'all' || status === filter) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
 function updateLog() {
     fetch('/api/invite_log')
         .then(response => response.json())
         .then(logs => {
             const tbody = document.querySelector('#invite-log tbody');
+            let newLogs = false;
+            
+            // Find the latest log ID
+            const latestId = Math.max(...logs.map(log => log.id));
+            if (latestId > lastLogId) {
+                newLogs = true;
+                lastLogId = latestId;
+            }
+
+            // Update completed invites count
+            completedInvites = logs.filter(log => log.status === 'invited' || log.status === 'failed').length;
+            updateProgress();
+
+            // Update table
             tbody.innerHTML = logs.map(log => `
                 <tr>
                     <td>${log.phone}</td>
-                    <td>${log.status}</td>
+                    <td class="${getStatusClass(log.status)}">${log.status}</td>
                     <td>${log.reason || '-'}</td>
                     <td>${new Date(log.created_at).toLocaleString()}</td>
                 </tr>
             `).join('');
+
+            // Apply current filter
+            if (newLogs) {
+                filterLogs(currentFilter);
+            }
+        })
+        .catch(error => {
+            console.error('Error updating log:', error);
         });
 }
-setInterval(updateLog, 5000);
-updateLog();
+
+// Update more frequently when there's an active task
+let updateInterval = setInterval(updateLog, 5000);
+updateLog(); // Initial load
+
+// Adjust update frequency based on activity
+function adjustUpdateFrequency() {
+    if (completedInvites < totalInvites) {
+        // More frequent updates during active invites
+        clearInterval(updateInterval);
+        updateInterval = setInterval(updateLog, 2000);
+    } else {
+        // Less frequent updates when idle
+        clearInterval(updateInterval);
+        updateInterval = setInterval(updateLog, 5000);
+    }
+}
+
+// Check activity every 10 seconds
+setInterval(adjustUpdateFrequency, 10000);
 </script>
 {% endblock %} 
