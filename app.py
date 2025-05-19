@@ -262,29 +262,32 @@ async def api_accounts():
 # --- Parser endpoints ---
 @app.route('/api/parse', methods=['POST'])
 async def start_parsing():
-    # Универсальный парсер: поддержка JSON и form-data
     group_link = None
     limit = None
-    if request.headers.get('Content-Type', '').startswith('application/json'):
-        data = await request.get_json()
-        if data:
-            group_link = data.get('group_link')
-            limit = data.get('limit')
+    # Логируем заголовки и тело запроса для отладки
+    logging.info(f"/api/parse headers: {dict(request.headers)}")
+    try:
+        if request.is_json:
+            data = await request.get_json()
+            logging.info(f"/api/parse got JSON: {data}")
+            if data:
+                group_link = data.get('group_link')
+                limit = data.get('limit')
+        if not group_link:
+            form = await request.form
+            logging.info(f"/api/parse got FORM: {form}")
+            group_link = form.get('group_link')
+            limit = form.get('limit')
+    except Exception as e:
+        logging.error(f"/api/parse error parsing input: {e}")
     if not group_link:
-        form = await request.form
-        group_link = form.get('group_link')
-        limit = form.get('limit')
-    if not group_link:
+        logging.error("/api/parse: group_link is missing!")
         return jsonify({'error': 'No group link provided'}), 400
 
-    # Создаем уникальный ID для этой задачи парсинга
     task_id = str(uuid.uuid4())
-    # Запускаем парсинг в отдельном потоке
     def run_parser():
         try:
-            # limit может быть строкой, приводим к int
             lmt = int(limit) if limit else 100
-            # get_next_account() — функция выбора аккаунта
             from tasks import get_next_account
             account = get_next_account()
             if not account:
