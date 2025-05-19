@@ -417,9 +417,14 @@ async def bulk_invite():
         for row in reader:
             if row and row[0].strip():
                 identifiers.append(row[0].strip())
+    # Получаем channel_username из config.json
+    cfg_path = os.path.join(os.path.dirname(__file__), 'config.json')
+    with open(cfg_path, 'r', encoding='utf-8') as f:
+        config = json.load(f)
+    channel_username = config.get('channel_username')
     # Запускаем одну групповую задачу
     from tasks import bulk_invite_task
-    result = bulk_invite_task.delay(identifiers)
+    result = bulk_invite_task.delay(channel_username, file_path)
     return jsonify({
         'status': 'success',
         'task_id': result.id,
