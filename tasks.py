@@ -182,6 +182,10 @@ def invite_task(self, identifier, channel_username=None):
             logging.info(f"[invite_task] Pause {pause:.2f} seconds between invites")
             time.sleep(pause)
 
+            # После любого log_invite (invited, failed, etc.)
+            if self.request.parent_id:
+                redis_client.hincrby(f'bulk_invite_status:{self.request.parent_id}', 'progress', 1)
+
         finally:
             client.disconnect()
 
@@ -231,6 +235,8 @@ def invite_task(self, identifier, channel_username=None):
             status='failed',
             reason=str(e)
         )
+        if self.request.parent_id:
+            redis_client.hincrby(f'bulk_invite_status:{self.request.parent_id}', 'progress', 1)
         raise
 
 
@@ -242,19 +248,17 @@ def bulk_invite_task(self, channel_username, file_path):
         with open(file_path, 'r', encoding='utf-8') as f:
             identifiers = [line.strip() for line in f if line.strip()]
         logging.info(f"[bulk_invite_task] identifiers count: {len(identifiers)}")
-        # Сразу записываем total в Redis
+        # Сразу записываем total в Redis, progress не трогаем
         redis_client.hset(f'bulk_invite_status:{self.request.id}', mapping={
             'progress': 0,
             'total': len(identifiers)
         })
         # Обрабатываем каждый идентификатор
-        for i, identifier in enumerate(identifiers, 1):
-            logging.info(f"[bulk_invite_task] Processing {i}/{len(identifiers)}: {identifier}")
-            invite_task.delay(channel_username, identifier)
-            # Обновляем прогресс
-            redis_client.hset(f'bulk_invite_status:{self.request.id}', 'progress', i)
-            # Пауза между приглашениями
-            time.sleep(275.75)
+        for identifier in identifiers:
+            logging.info(f"[bulk_invite_task] Processing: {identifier}")
+            invite_task.apply_async((identifier, channel_username), parent_id=self.request.id)
+            # Не обновляем progress здесь!
+            time.sleep(1)  # Можно уменьшить паузу для теста
     except Exception as e:
         logging.error(f"[bulk_invite_task] Error: {str(e)}")
         raise
