@@ -409,26 +409,17 @@ async def bulk_invite():
     filename = f'bulk_invite_{uuid.uuid4()}.csv'
     file_path = os.path.join('chat-logs', filename)
     await file.save(file_path)
-    # Читаем телефоны/username из CSV
-    identifiers = []
-    with open(file_path, 'r', encoding='utf-8') as f:
-        import csv as pycsv
-        reader = pycsv.reader(f)
-        for row in reader:
-            if row and row[0].strip():
-                identifiers.append(row[0].strip())
     # Получаем channel_username из config.json
     cfg_path = os.path.join(os.path.dirname(__file__), 'config.json')
     with open(cfg_path, 'r', encoding='utf-8') as f:
         config = json.load(f)
     channel_username = config.get('channel_username')
-    # Запускаем одну групповую задачу
+    # Запускаем задачу Celery только с channel_username и file_path
     from tasks import bulk_invite_task
     result = bulk_invite_task.delay(channel_username, file_path)
     return jsonify({
         'status': 'success',
-        'task_id': result.id,
-        'phones_count': len(identifiers)
+        'task_id': result.id
     })
 
 @app.route('/api/invite_log', methods=['GET'])
