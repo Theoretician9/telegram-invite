@@ -7,6 +7,7 @@ import logging
 import pymysql
 import json
 from datetime import datetime
+import redis
 
 from celery_app import app
 from telethon.sync import TelegramClient
@@ -29,6 +30,9 @@ DB_HOST = os.getenv('DB_HOST', '127.0.0.1')
 DB_NAME = os.getenv('DB_NAME', 'telegraminvi')
 DB_USER = os.getenv('DB_USER', 'telegraminvi')
 DB_PASS = os.getenv('DB_PASS', 'QyA9fWbh56Ln')
+
+REDIS_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
+redis_client = redis.Redis.from_url(REDIS_URL)
 
 
 def get_db_conn():
@@ -215,7 +219,7 @@ def bulk_invite_task(self, identifiers, channel_username=None):
             from telethon.tl.functions.channels import InviteToChannelRequest
             from telethon.tl.functions.contacts import ImportContactsRequest, DeleteContactsRequest
             from telethon.tl.types import InputPhoneContact
-            for identifier in identifiers:
+            for i, identifier in enumerate(identifiers, 1):
                 try:
                     is_phone = identifier.replace('+', '').isdigit()
                     if is_phone:
@@ -253,6 +257,11 @@ def bulk_invite_task(self, identifiers, channel_username=None):
                         status='failed',
                         reason=str(e)
                     )
+                # Обновляем прогресс в Redis
+                redis_client.hset(f'bulk_invite_status:{self.request.id}', mapping={
+                    'progress': i,
+                    'total': len(identifiers)
+                })
                 # Пауза между инвайтами
                 pause = random.uniform(pause_min, pause_max)
                 logging.info(f"[bulk_invite_task] Pause {pause:.2f} seconds between invites")

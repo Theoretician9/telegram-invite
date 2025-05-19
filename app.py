@@ -533,6 +533,21 @@ async def api_qr_status(token):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/bulk_invite/status', methods=['GET'])
+async def bulk_invite_status():
+    task_id = request.args.get('task_id')
+    if not task_id:
+        return jsonify({'error': 'No task_id provided'}), 400
+    import redis
+    REDIS_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
+    redis_client = redis.Redis.from_url(REDIS_URL)
+    status = redis_client.hgetall(f'bulk_invite_status:{task_id}')
+    if status:
+        progress = int(status.get(b'progress', b'0'))
+        total = int(status.get(b'total', b'0'))
+        return jsonify({'progress': progress, 'total': total})
+    return jsonify({'progress': 0, 'total': 0})
+
 if __name__ == '__main__':
     import hypercorn.asyncio
     import hypercorn.config

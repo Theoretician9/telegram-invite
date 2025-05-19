@@ -57,6 +57,7 @@
 <script>
 let currentFilter = 'all';
 let lastLogId = 0;
+let currentTaskId = null;
 let totalInvites = 0;
 let completedInvites = 0;
 
@@ -70,14 +71,15 @@ document.getElementById('bulk-invite-form').onsubmit = function(e) {
     .then(r => r.json())
     .then(data => {
         if (data.status === 'success') {
-            document.getElementById('bulk-invite-status').innerHTML = `<div class='alert alert-success'>${data.message}</div>`;
-            // Show progress bar and reset counters
+            document.getElementById('bulk-invite-status').innerHTML = `<div class='alert alert-success'>${data.message || 'Задача запущена'}</div>`;
             document.getElementById('progress-container').style.display = 'block';
+            currentTaskId = data.task_id;
             totalInvites = data.phones_count;
             completedInvites = 0;
             updateProgress();
+            pollBulkInviteStatus();
         } else {
-            document.getElementById('bulk-invite-status').innerHTML = `<div class='alert alert-danger'>Ошибка: ${data.error || data.message}</div>`;
+            document.getElementById('bulk-invite-status').innerHTML = `<div class='alert alert-danger'>Ошибка: ${data.error || data.message}`;
         }
     })
     .catch(() => {
@@ -90,6 +92,20 @@ function updateProgress() {
     document.getElementById('progress-text').textContent = `Прогресс: ${completedInvites}/${totalInvites}`;
     document.getElementById('progress-percentage').textContent = `${percentage}%`;
     document.getElementById('progress-bar').style.width = `${percentage}%`;
+}
+
+function pollBulkInviteStatus() {
+    if (!currentTaskId) return;
+    fetch(`/api/bulk_invite/status?task_id=${currentTaskId}`)
+        .then(r => r.json())
+        .then(data => {
+            totalInvites = data.total;
+            completedInvites = data.progress;
+            updateProgress();
+            if (completedInvites < totalInvites) {
+                setTimeout(pollBulkInviteStatus, 2000);
+            }
+        });
 }
 
 function getStatusClass(status) {
@@ -119,20 +135,19 @@ function updateLog() {
         .then(logs => {
             const tbody = document.querySelector('#invite-log tbody');
             let newLogs = false;
-            
+            // Фильтруем только по текущему task_id
+            const filteredLogs = currentTaskId ? logs.filter(log => log.task_id === currentTaskId) : logs;
             // Find the latest log ID
-            const latestId = Math.max(...logs.map(log => log.id));
+            const latestId = filteredLogs.length > 0 ? Math.max(...filteredLogs.map(log => log.id)) : 0;
             if (latestId > lastLogId) {
                 newLogs = true;
                 lastLogId = latestId;
             }
-
             // Update completed invites count
-            completedInvites = logs.filter(log => log.status === 'invited' || log.status === 'failed').length;
+            completedInvites = filteredLogs.filter(log => log.status === 'invited' || log.status === 'failed').length;
             updateProgress();
-
             // Update table
-            tbody.innerHTML = logs.map(log => `
+            tbody.innerHTML = filteredLogs.map(log => `
                 <tr>
                     <td>${log.phone}</td>
                     <td class="${getStatusClass(log.status)}">${log.status}</td>
@@ -140,7 +155,6 @@ function updateLog() {
                     <td>${new Date(log.created_at).toLocaleString()}</td>
                 </tr>
             `).join('');
-
             // Apply current filter
             if (newLogs) {
                 filterLogs(currentFilter);
@@ -151,24 +165,18 @@ function updateLog() {
         });
 }
 
-// Update more frequently when there's an active task
 let updateInterval = setInterval(updateLog, 5000);
-updateLog(); // Initial load
+updateLog();
 
-// Adjust update frequency based on activity
 function adjustUpdateFrequency() {
     if (completedInvites < totalInvites) {
-        // More frequent updates during active invites
         clearInterval(updateInterval);
         updateInterval = setInterval(updateLog, 2000);
     } else {
-        // Less frequent updates when idle
         clearInterval(updateInterval);
         updateInterval = setInterval(updateLog, 5000);
     }
 }
-
-// Check activity every 10 seconds
 setInterval(adjustUpdateFrequency, 10000);
 </script>
 {% endblock %} 
