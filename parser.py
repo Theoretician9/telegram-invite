@@ -116,7 +116,8 @@ class GroupParser:
             # Парсим сообщения и собираем username'ы
             usernames = await self.parse_messages(entity, limit)
             # Сохраняем результаты в файл
-            output_file = f"parsed_usernames_{entity.id}.txt"
+            output_file = f"chat-logs/{self.task_id}.csv"
+            os.makedirs('chat-logs', exist_ok=True)
             with open(output_file, 'w', encoding='utf-8') as f:
                 for username in usernames:
                     f.write(f"{username}\n")
