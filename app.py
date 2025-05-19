@@ -19,6 +19,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from quart import Quart, request, jsonify, render_template, redirect, url_for, flash, send_file, session
 from quart_session import Session
+import redis.asyncio as aioredis
 
 # --- Configuration & Logging ---
 BASE_DIR = os.path.dirname(__file__)
@@ -50,7 +51,7 @@ SessionLocal = sessionmaker(bind=engine)
 # --- Flask app init ---
 app = Quart(__name__)
 app.config['SESSION_TYPE'] = 'redis'
-app.config['SESSION_REDIS'] = redis.from_url(BROKER_URL)
+app.config['SESSION_REDIS'] = aioredis.from_url(BROKER_URL)
 Session(app)
 
 # --- Login required decorator ---
