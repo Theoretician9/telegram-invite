@@ -68,11 +68,11 @@ Session(app)
 # --- Login required decorator ---
 def login_required(f):
     @wraps(f)
-    def decorated_function(*args, **kwargs):
+    async def decorated_function(*args, **kwargs):
         if not session.get('authenticated'):
             flash('Пожалуйста, войдите в систему', 'warning')
             return redirect(url_for('login'))
-        return f(*args, **kwargs)
+        return await f(*args, **kwargs)
     return decorated_function
 
 # --- Login route ---
