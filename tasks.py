@@ -57,16 +57,16 @@ def get_next_account():
     try:
         with conn.cursor() as cur:
             cur.execute("""
-                SELECT account_name, MAX(created_at) as last_used
+                SELECT account_id, MAX(created_at) as last_used
                 FROM invite_logs
-                GROUP BY account_name
+                GROUP BY account_id
             """)
-            last_used = {row['account_name']: row['last_used'] for row in cur.fetchall()}
+            last_used = {row['account_id']: row['last_used'] for row in cur.fetchall()}
     finally:
         conn.close()
     
     # Сортируем аккаунты по времени последнего использования
-    accounts.sort(key=lambda x: last_used.get(x['name'], datetime.min))
+    accounts.sort(key=lambda x: last_used.get(x.get('id'), datetime.min))
     return accounts[0]
 
 
