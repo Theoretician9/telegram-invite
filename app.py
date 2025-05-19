@@ -77,15 +77,12 @@ def login_required(f):
 
 # --- Login route ---
 @app.route('/login', methods=['GET', 'POST'])
-def login():
+async def login():
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        
+        form = await request.form
+        username = form.get('username')
+        password = form.get('password')
         logging.info(f"Login attempt: username={username}")
-        
-        # Здесь должна быть проверка учетных данных
-        # В данном примере используем простую проверку
         if username == os.getenv('ADMIN_USERNAME', 'admin') and \
            password == os.getenv('ADMIN_PASSWORD', 'admin'):
             session['authenticated'] = True
@@ -95,28 +92,26 @@ def login():
         else:
             logging.warning(f"Login failed for user: {username}")
             flash('Неверное имя пользователя или пароль', 'danger')
-    
-    return render_template('login.html')
+    return await render_template('login.html')
 
 # --- Logout route ---
 @app.route('/logout')
-def logout():
+async def logout():
     session.pop('authenticated', None)
     flash('Вы вышли из системы', 'info')
     return redirect(url_for('login'))
 
 # --- Root route ---
 @app.route('/')
-def index():
+async def index():
     if not session.get('authenticated'):
         return redirect(url_for('login'))
     return redirect(url_for('admin_panel'))
 
 # --- Stats page ---
 @app.route('/stats')
-@login_required
-def stats():
-    return render_template('stats.html')
+async def stats():
+    return await render_template('stats.html')
 
 # --- Helper: count only invite_task in Redis queue ---
 def count_invite_tasks():
@@ -135,33 +130,34 @@ def count_invite_tasks():
 # --- Admin panel ---
 @app.route('/admin', methods=['GET', 'POST'])
 @login_required
-def admin_panel():
+async def admin_panel():
     global config
     # Убедимся, что новые ключи всегда есть
     config.setdefault('only_message_bot', False)
     config.setdefault('invite_and_message', False)
 
     if request.method == 'POST':
-        config['channel_username']  = request.form['channel_username'].strip()
-        config['failure_message']   = request.form['failure_message']
-        config['queue_threshold']   = int(request.form['queue_threshold'])
-        config['pause_min_seconds'] = int(request.form['pause_min_seconds'])
-        config['pause_max_seconds'] = int(request.form['pause_max_seconds'])
+        form = await request.form
+        config['channel_username']  = form['channel_username'].strip()
+        config['failure_message']   = form['failure_message']
+        config['queue_threshold']   = int(form['queue_threshold'])
+        config['pause_min_seconds'] = int(form['pause_min_seconds'])
+        config['pause_max_seconds'] = int(form['pause_max_seconds'])
         # Новые чекбоксы:
-        config['only_message_bot']     = 'only_message_bot' in request.form
-        config['invite_and_message']   = 'invite_and_message' in request.form
+        config['only_message_bot']     = 'only_message_bot' in form
+        config['invite_and_message']   = 'invite_and_message' in form
 
         with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
         flash('Настройки сохранены.', 'success')
         return redirect(url_for('admin_panel'))
 
-    return render_template('admin.html', config=config)
+    return await render_template('admin.html', config=config)
 
 # --- Logs viewer (HTML) ---
 @app.route('/logs', methods=['GET'])
 @login_required
-def view_logs():
+async def view_logs():
     entries = []
     if os.path.exists(LOG_PATH):
         with open(LOG_PATH, 'r', encoding='utf-8') as f:
@@ -173,19 +169,19 @@ def view_logs():
                 lvl = parts[2]
                 msg = ' '.join(parts[3:])
                 entries.append((ts, lvl, msg))
-    return render_template('logs.html', entries=entries)
+    return await render_template('logs.html', entries=entries)
 
 # --- Parser page ---
 @app.route('/parser', methods=['GET'])
 @login_required
-def parser_page():
-    return render_template('parser.html')
+async def parser_page():
+    return await render_template('parser.html')
 
 # --- Bulk invite page ---
 @app.route('/bulk_invite', methods=['GET'])
 @login_required
-def bulk_invite_page():
-    return render_template('bulk_invite.html')
+async def bulk_invite_page():
+    return await render_template('bulk_invite.html')
 
 # --- Webhook handler with immediate alert check ---
 @app.route('/webhook', methods=['GET','POST'], strict_slashes=False)
@@ -446,8 +442,8 @@ def api_add_account():
         db.close()
 
 @app.route('/admin/accounts')
-def admin_accounts():
-    return render_template('admin/accounts.html')
+async def admin_accounts():
+    return await render_template('admin/accounts.html')
 
 @app.route('/api/accounts/qr_login', methods=['POST'])
 async def api_qr_login():
