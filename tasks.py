@@ -143,20 +143,29 @@ def invite_task(self, identifier, channel_username=None):
                 user = imported.users[0] if imported.users else None
                 if not user:
                     raise Exception("User not found by phone")
-                # Приглашаем пользователя в канал
-                result = client(InviteToChannelRequest(
-                    channel=channel_username,
-                    users=[user]
-                ))
-                # Удаляем контакт после приглашения
-                client(DeleteContactsRequest(id=[user.id]))
             else:
                 # Получаем entity по username
                 user = client.get_entity(identifier)
-                result = client(InviteToChannelRequest(
-                    channel=channel_username,
-                    users=[user]
-                ))
+
+            # Проверяем, есть ли пользователь в канале
+            channel = client.get_entity(channel_username)
+            participants = client.get_participants(channel)
+            if user.id in [p.id for p in participants]:
+                log_invite(
+                    task_id=self.request.id,
+                    account_id=account.get('id', account.get('name', 'unknown')),
+                    channel_username=channel_username,
+                    identifier=identifier,
+                    status='already_member',
+                    reason='User already in channel'
+                )
+                return
+
+            # Приглашаем пользователя в канал
+            result = client(InviteToChannelRequest(
+                channel=channel_username,
+                users=[user]
+            ))
 
             # Логируем результат
             log_invite(
@@ -176,6 +185,33 @@ def invite_task(self, identifier, channel_username=None):
         finally:
             client.disconnect()
 
+    except UserPrivacyRestrictedError:
+        log_invite(
+            task_id=self.request.id,
+            account_id=account.get('id', account.get('name', 'unknown')),
+            channel_username=channel_username,
+            identifier=identifier,
+            status='privacy_restricted',
+            reason='User privacy restricted'
+        )
+    except FloodWaitError as e:
+        log_invite(
+            task_id=self.request.id,
+            account_id=account.get('id', account.get('name', 'unknown')),
+            channel_username=channel_username,
+            identifier=identifier,
+            status='flood_wait',
+            reason=f'Flood wait: {e.seconds} seconds'
+        )
+    except PeerFloodError:
+        log_invite(
+            task_id=self.request.id,
+            account_id=account.get('id', account.get('name', 'unknown')),
+            channel_username=channel_username,
+            identifier=identifier,
+            status='peer_flood',
+            reason='Peer flood error'
+        )
     except Exception as e:
         logging.error(f"Error in invite_task: {str(e)}")
         log_invite(
