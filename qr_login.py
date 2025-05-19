@@ -17,7 +17,8 @@ import traceback
 QR_SESSIONS = {}
 
 async def generate_qr_login(api_id, api_hash):
-    client = TelegramClient(StringSession(), api_id, api_hash)
+    session_file = "invite_session.session"
+    client = TelegramClient(session_file, api_id, api_hash)
     await client.connect()
     qr_login = await client.qr_login()
     qr_img = qrcode.make(qr_login.url)
