@@ -115,6 +115,7 @@ document.getElementById('download-btn').onclick = async function() {
     if (!filePath && currentTaskId) {
         filePath = `chat-logs/${currentTaskId}.csv`;
     }
+    console.log('Download button clicked:', {filePath, currentResultFile, currentTaskId, disabled: this.disabled});
     if (!filePath) return;
     try {
         const response = await fetch(`/api/parse/download/${encodeURIComponent(filePath.replace('chat-logs/',''))}`);
