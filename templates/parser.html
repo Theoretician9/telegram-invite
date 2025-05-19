@@ -23,9 +23,9 @@
                 </div>
                 <div id="progress-text" class="mt-2"></div>
             </div>
-            <div id="result-block" class="mt-3" style="display:none;">
+            <div id="result-block" class="mt-3">
                 <div class="alert alert-success" id="result-message"></div>
-                <button class="btn btn-primary" id="download-btn">Скачать результат</button>
+                <button class="btn btn-primary" id="download-btn" disabled>Скачать результат</button>
             </div>
         </div>
     </div>
@@ -49,23 +49,22 @@ function pollStatus() {
                 progressBar.textContent = '100%';
                 progressBar.setAttribute('aria-valuenow', '100');
                 progressText.textContent = 'Парсинг завершён';
-                resultBlock.style.display = 'block';
                 resultMessage.textContent = data.total ? `Найдено ${data.total} уникальных ID` : 'Парсинг завершён';
-                downloadBtn.style.display = 'inline-block';
+                downloadBtn.disabled = false;
             } else if (data.status === 'error') {
                 progressBlock.style.display = 'none';
-                resultBlock.style.display = 'block';
                 resultMessage.className = 'alert alert-danger';
                 resultMessage.textContent = 'Ошибка: ' + (data.error || 'Неизвестная ошибка');
-                downloadBtn.style.display = 'none';
+                downloadBtn.disabled = true;
             } else {
                 progressBlock.style.display = 'block';
-                resultBlock.style.display = 'none';
                 const percent = data.progress ? Math.round(data.progress) : 0;
                 progressBar.style.width = percent + '%';
                 progressBar.textContent = percent + '%';
                 progressBar.setAttribute('aria-valuenow', percent);
                 progressText.textContent = `Прогресс: ${percent}%`;
+                resultMessage.textContent = '';
+                downloadBtn.disabled = true;
                 setTimeout(pollStatus, 1000);
             }
         })
