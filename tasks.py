@@ -194,6 +194,15 @@ def invite_task(self, identifier, channel_username=None):
             status='privacy_restricted',
             reason='User privacy restricted'
         )
+    except UserNotMutualContactError:
+        log_invite(
+            task_id=self.request.id,
+            account_id=account.get('id', account.get('name', 'unknown')),
+            channel_username=channel_username,
+            identifier=identifier,
+            status='left_channel',
+            reason='User left the channel'
+        )
     except FloodWaitError as e:
         log_invite(
             task_id=self.request.id,
