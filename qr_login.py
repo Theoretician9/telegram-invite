@@ -20,7 +20,6 @@ async def generate_qr_login(api_id, api_hash):
     client = TelegramClient(StringSession(), api_id, api_hash)
     await client.connect()
     qr_login = await client.qr_login()
-    qr_bytes = qr_login.url.encode()
     qr_img = qrcode.make(qr_login.url)
     buf = io.BytesIO()
     qr_img.save(buf, format='PNG')
@@ -34,16 +33,19 @@ async def generate_qr_login(api_id, api_hash):
         'session_string': None,
         'user': None
     }
+    print(f"[QR] Generated token: {token}, QR_SESSIONS keys: {list(QR_SESSIONS.keys())}")
     return qr_b64, token
 
 async def poll_qr_login(token):
+    print(f"[QR] poll_qr_login called with token: {token}, QR_SESSIONS keys: {list(QR_SESSIONS.keys())}")
     session = QR_SESSIONS.get(token)
     if not session:
+        print("[QR] Session not found for token!")
         return {'status': 'not_found'}
     client = session['client']
     qr_login = session['qr_login']
     try:
-        await qr_login.wait()
+        await asyncio.wait_for(qr_login.wait(), timeout=120)
         session['done'] = True
         session_string = client.session.save()
         me = await client.get_me()
@@ -61,6 +63,9 @@ async def poll_qr_login(token):
                 'last_name': me.last_name
             }
         }
+    except asyncio.TimeoutError:
+        print(f"[QR] TimeoutError for token: {token}")
+        return {'status': 'timeout', 'error': 'QR-код устарел. Попробуйте сгенерировать новый.'}
     except Exception as e:
         err_text = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
         print(f"[ERROR] poll_qr_login: {err_text}")
