@@ -57,15 +57,22 @@ async def poll_qr_login(token):
     qr_login = session['qr_login']
     try:
         try:
+            print(f"[QR] Waiting for QR login (token: {token})...")
             await asyncio.wait_for(qr_login.wait(), timeout=30)
+            print(f"[QR] QR login wait() finished (token: {token})")
         except Exception as e:
             print(f"[QR] wait() exception for token: {token}: {e}, пробуем try_get_me()")
         me = await try_get_me(client, attempts=5, delay=2)
         if me:
+            print(f"[QR] Got user: {me.id} {me.username} {me.phone}")
             session_string = client.session.save()
             session['session_string'] = session_string
             session['user'] = me
-            await client.disconnect()
+            try:
+                await client.disconnect()
+                print(f"[QR] Client disconnected after successful login (token: {token})")
+            except Exception as e:
+                print(f"[QR] Exception on disconnect: {e}")
             print("[QR] Session is active! Returning authorized.")
             return {
                 'status': 'authorized',
@@ -79,8 +86,18 @@ async def poll_qr_login(token):
                 }
             }
         print(f"[QR] QR-код устарел или не авторизован.")
+        try:
+            await client.disconnect()
+            print(f"[QR] Client disconnected after failed login (token: {token})")
+        except Exception as e:
+            print(f"[QR] Exception on disconnect after fail: {e}")
         return {'status': 'timeout', 'error': 'QR-код устарел. Попробуйте сгенерировать новый.'}
     except Exception as e:
         err_text = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
         print(f"[ERROR] poll_qr_login: {err_text}")
+        try:
+            await client.disconnect()
+            print(f"[QR] Client disconnected after exception (token: {token})")
+        except Exception as e2:
+            print(f"[QR] Exception on disconnect after exception: {e2}")
         return {'status': 'error', 'error': err_text} 
