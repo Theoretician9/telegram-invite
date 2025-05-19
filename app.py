@@ -18,6 +18,7 @@ from models import Account, AccountChannelLimit, Base, InviteLog
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from quart import Quart, request, jsonify, render_template, redirect, url_for, flash, send_file, session
+from quart_session import Session
 
 # --- Configuration & Logging ---
 BASE_DIR = os.path.dirname(__file__)
@@ -48,6 +49,9 @@ SessionLocal = sessionmaker(bind=engine)
 
 # --- Flask app init ---
 app = Quart(__name__)
+app.config['SESSION_TYPE'] = 'redis'
+app.config['SESSION_REDIS'] = redis.from_url(BROKER_URL)
+Session(app)
 
 # --- Login required decorator ---
 def login_required(f):
