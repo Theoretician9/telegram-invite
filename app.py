@@ -319,15 +319,27 @@ async def parse_status():
     task_id = request.args.get('task_id')
     if not task_id:
         return jsonify({'error': 'No task_id provided'}), 400
-        
+
+    import redis
+    REDIS_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
+    redis_client = redis.Redis.from_url(REDIS_URL)
     # Проверяем наличие файла с результатами
     result_file = f'chat-logs/{task_id}.csv'
     if os.path.exists(result_file):
+        # Пробуем получить total из Redis (или из файла)
+        total = None
+        try:
+            status = redis_client.hgetall(f'parse_status:{task_id}')
+            if status and b'total' in status:
+                total = int(status[b'total'])
+        except Exception:
+            pass
         return jsonify({
             'status': 'completed',
+            'progress': 100,
+            'total': total,
             'file': result_file
         })
-    
     # Проверяем наличие файла с ошибкой
     error_file = f'chat-logs/{task_id}.error'
     if os.path.exists(error_file):
@@ -337,9 +349,23 @@ async def parse_status():
             'status': 'error',
             'error': error
         })
-    
+    # Если задача в процессе — читаем прогресс из Redis
+    try:
+        status = redis_client.hgetall(f'parse_status:{task_id}')
+        if status:
+            progress = int(status.get(b'progress', b'0'))
+            total = int(status.get(b'total', b'0'))
+            return jsonify({
+                'status': 'in_progress',
+                'progress': progress,
+                'total': total
+            })
+    except Exception:
+        pass
     return jsonify({
-        'status': 'in_progress'
+        'status': 'in_progress',
+        'progress': 0,
+        'total': 0
     })
 
 @app.route('/api/parse/download/<filename>', methods=['GET'])
