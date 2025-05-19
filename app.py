@@ -408,35 +408,44 @@ async def api_invite_log():
 @app.route('/api/accounts/add', methods=['POST'])
 async def api_add_account():
     data = await request.get_json()
+    logging.info(f"/api/accounts/add received: {data}")
     if not data:
         return jsonify({'error': 'No data provided'}), 400
-        
-    required_fields = ['name', 'api_id', 'api_hash', 'session_string']
+    
+    # Имя аккаунта: username > phone > name
+    name = data.get('username') or data.get('phone') or data.get('name')
+    if not name:
+        return jsonify({'error': 'Missing required field: name/username/phone'}), 400
+    
+    required_fields = ['api_id', 'api_hash', 'session_string']
     for field in required_fields:
         if field not in data:
             return jsonify({'error': f'Missing required field: {field}'}), 400
-            
+    
     db = SessionLocal()
     try:
         # Проверяем, нет ли уже аккаунта с таким именем
-        existing = db.query(Account).filter_by(name=data['name']).first()
+        existing = db.query(Account).filter_by(name=name).first()
         if existing:
             return jsonify({'error': 'Account with this name already exists'}), 400
-            
-        # Создаем новый аккаунт
+        
+        # Создаём новый аккаунт
         account = Account(
-            name=data['name'],
+            name=name,
             api_id=data['api_id'],
             api_hash=data['api_hash'],
             session_string=data['session_string'],
             is_active=data.get('is_active', True),
             comment=data.get('comment', '')
         )
+        # Если в модели есть phone, сохраняем
+        if hasattr(account, 'phone'):
+            account.phone = data.get('phone')
         db.add(account)
         db.commit()
         
         return jsonify({
-            'status': 'success',
+            'status': 'ok',
             'account': {
                 'id': account.id,
                 'name': account.name,
@@ -446,11 +455,13 @@ async def api_add_account():
                 'is_active': account.is_active,
                 'last_used': account.last_used.isoformat() if account.last_used else None,
                 'created_at': account.created_at.isoformat() if account.created_at else None,
-                'comment': account.comment or ''
+                'comment': account.comment or '',
+                'phone': getattr(account, 'phone', None)
             }
         })
     except Exception as e:
         db.rollback()
+        logging.error(f"/api/accounts/add error: {e}")
         return jsonify({'error': str(e)}), 500
     finally:
         db.close()
