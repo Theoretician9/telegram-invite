@@ -256,7 +256,7 @@ def bulk_invite_task(self, channel_username, file_path):
         # Обрабатываем каждый идентификатор
         for identifier in identifiers:
             logging.info(f"[bulk_invite_task] Processing: {identifier}")
-            invite_task.apply_async((identifier, channel_username), parent_id=self.request.id)
+            invite_task.delay(identifier, channel_username)
             # Не обновляем progress здесь!
             time.sleep(1)  # Можно уменьшить паузу для теста
     except Exception as e:
