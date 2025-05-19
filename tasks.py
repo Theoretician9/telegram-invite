@@ -159,7 +159,7 @@ def invite_task(self, identifier, channel_username=None):
             # Логируем результат
             log_invite(
                 task_id=self.request.id,
-                account_id=account['id'],
+                account_id=account.get('id', account.get('name', 'unknown')),
                 channel_username=channel_username,
                 identifier=identifier,
                 status='invited',
@@ -178,7 +178,7 @@ def invite_task(self, identifier, channel_username=None):
         logging.error(f"Error in invite_task: {str(e)}")
         log_invite(
             task_id=self.request.id,
-            account_id=account['id'] if account else 'unknown',
+            account_id=account.get('id', account.get('name', 'unknown')) if account else 'unknown',
             channel_username=channel_username,
             identifier=identifier,
             status='failed',
@@ -241,7 +241,7 @@ def bulk_invite_task(self, identifiers, channel_username=None):
                         ))
                     log_invite(
                         task_id=self.request.id,
-                        account_id=account['id'],
+                        account_id=account.get('id', account.get('name', 'unknown')),
                         channel_username=channel_username,
                         identifier=identifier,
                         status='invited',
@@ -251,7 +251,7 @@ def bulk_invite_task(self, identifiers, channel_username=None):
                     logging.error(f"Error in bulk_invite_task for {identifier}: {str(e)}")
                     log_invite(
                         task_id=self.request.id,
-                        account_id=account['id'] if account else 'unknown',
+                        account_id=account.get('id', account.get('name', 'unknown')) if account else 'unknown',
                         channel_username=channel_username,
                         identifier=identifier,
                         status='failed',
@@ -274,7 +274,7 @@ def bulk_invite_task(self, identifiers, channel_username=None):
         for identifier in identifiers:
             log_invite(
                 task_id=self.request.id,
-                account_id=account['id'] if account else 'unknown',
+                account_id=account.get('id', account.get('name', 'unknown')) if account else 'unknown',
                 channel_username=channel_username,
                 identifier=identifier,
                 status='failed',
