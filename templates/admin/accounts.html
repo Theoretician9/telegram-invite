@@ -122,6 +122,9 @@ function pollQrStatus(token) {
                 } else if (data.status === 'error') {
                     document.getElementById('qr-status').textContent = 'Ошибка: ' + (data.error || 'Неизвестная ошибка');
                     clearInterval(interval);
+                } else if (data.status === 'timeout') {
+                    document.getElementById('qr-status').textContent = data.error || 'QR-код устарел. Попробуйте сгенерировать новый.';
+                    clearInterval(interval);
                 }
             });
     }, 2000);

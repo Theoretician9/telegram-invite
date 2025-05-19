@@ -45,51 +45,35 @@ async def poll_qr_login(token):
     client = session['client']
     qr_login = session['qr_login']
     try:
+        # Пробуем дождаться события авторизации
         try:
             await asyncio.wait_for(qr_login.wait(), timeout=30)
-        except asyncio.TimeoutError:
-            # Попробуем получить пользователя напрямую
-            try:
-                me = await client.get_me()
-                if me:
-                    session_string = client.session.save()
-                    session['session_string'] = session_string
-                    session['user'] = me
-                    await client.disconnect()
-                    print("[QR] Timeout, but session is active! Returning authorized.")
-                    return {
-                        'status': 'authorized',
-                        'session_string': session_string,
-                        'user': {
-                            'id': me.id,
-                            'username': me.username,
-                            'phone': me.phone,
-                            'first_name': me.first_name,
-                            'last_name': me.last_name
-                        }
+        except Exception as e:
+            print(f"[QR] wait() exception for token: {token}: {e}, пробуем get_me()")
+        # В любом случае (даже если был timeout или другая ошибка) — пробуем получить пользователя
+        try:
+            me = await client.get_me()
+            if me:
+                session_string = client.session.save()
+                session['session_string'] = session_string
+                session['user'] = me
+                await client.disconnect()
+                print("[QR] Session is active! Returning authorized.")
+                return {
+                    'status': 'authorized',
+                    'session_string': session_string,
+                    'user': {
+                        'id': me.id,
+                        'username': me.username,
+                        'phone': me.phone,
+                        'first_name': me.first_name,
+                        'last_name': me.last_name
                     }
-            except Exception as e:
-                print(f"[QR] Timeout and get_me failed: {e}")
-            print(f"[QR] TimeoutError for token: {token}")
-            return {'status': 'timeout', 'error': 'QR-код устарел. Попробуйте сгенерировать новый.'}
-        # Если wait() сработал — обычный сценарий
-        session['done'] = True
-        session_string = client.session.save()
-        me = await client.get_me()
-        session['session_string'] = session_string
-        session['user'] = me
-        await client.disconnect()
-        return {
-            'status': 'authorized',
-            'session_string': session_string,
-            'user': {
-                'id': me.id,
-                'username': me.username,
-                'phone': me.phone,
-                'first_name': me.first_name,
-                'last_name': me.last_name
-            }
-        }
+                }
+        except Exception as e:
+            print(f"[QR] get_me failed: {e}")
+        print(f"[QR] QR-код устарел или не авторизован.")
+        return {'status': 'timeout', 'error': 'QR-код устарел. Попробуйте сгенерировать новый.'}
     except Exception as e:
         err_text = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
         print(f"[ERROR] poll_qr_login: {err_text}")
