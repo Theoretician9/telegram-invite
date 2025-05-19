@@ -59,12 +59,14 @@ function pollStatus() {
                     currentResultFile = null;
                 }
                 downloadBtn.disabled = false;
+                console.log('Кнопка скачивания активна:', downloadBtn.disabled);
             } else if (data.status === 'error') {
                 progressBlock.style.display = 'none';
                 resultMessage.className = 'alert alert-danger';
                 resultMessage.textContent = 'Ошибка: ' + (data.error || 'Неизвестная ошибка');
                 downloadBtn.disabled = true;
                 currentResultFile = null;
+                console.log('Кнопка скачивания неактивна (ошибка):', downloadBtn.disabled);
             } else {
                 progressBlock.style.display = 'block';
                 const percent = data.progress ? Math.round(data.progress) : 0;
@@ -76,6 +78,7 @@ function pollStatus() {
                 downloadBtn.disabled = true;
                 currentResultFile = null;
                 setTimeout(pollStatus, 1000);
+                console.log('Кнопка скачивания неактивна (в процессе):', downloadBtn.disabled);
             }
         })
         .catch(() => {
