@@ -262,10 +262,17 @@ async def api_accounts():
 # --- Parser endpoints ---
 @app.route('/api/parse', methods=['POST'])
 async def start_parsing():
+    logging.info("=== /api/parse called ===")
     group_link = None
     limit = None
-    # Логируем заголовки и тело запроса для отладки
+    # Логируем заголовки
     logging.info(f"/api/parse headers: {dict(request.headers)}")
+    # Логируем тело запроса (если не слишком большое)
+    try:
+        raw_body = await request.get_data(as_text=True)
+        logging.info(f"/api/parse raw body: {raw_body}")
+    except Exception as e:
+        logging.error(f"/api/parse error reading raw body: {e}")
     try:
         if request.is_json:
             data = await request.get_json()
@@ -280,6 +287,7 @@ async def start_parsing():
             limit = form.get('limit')
     except Exception as e:
         logging.error(f"/api/parse error parsing input: {e}")
+    logging.info(f"/api/parse resolved group_link={group_link!r}, limit={limit!r}")
     if not group_link:
         logging.error("/api/parse: group_link is missing!")
         return jsonify({'error': 'No group link provided'}), 400
@@ -287,9 +295,11 @@ async def start_parsing():
     task_id = str(uuid.uuid4())
     def run_parser():
         try:
+            logging.info(f"[THREAD] run_parser started with group_link={group_link!r}, limit={limit!r}, task_id={task_id}")
             lmt = int(limit) if limit else 100
             from tasks import get_next_account
             account = get_next_account()
+            logging.info(f"[THREAD] Selected account: {account}")
             if not account:
                 raise Exception('Нет доступных аккаунтов для парсинга')
             asyncio.run(parse_group_with_account(group_link, lmt, account, task_id))
@@ -298,6 +308,7 @@ async def start_parsing():
     import threading
     thread = threading.Thread(target=run_parser)
     thread.start()
+    logging.info(f"/api/parse: started thread for task_id={task_id}")
     return jsonify({
         'status': 'started',
         'task_id': task_id
