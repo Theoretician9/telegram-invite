@@ -93,6 +93,7 @@ function pollQrStatus(token) {
         fetch(`/api/accounts/qr_status/${token}`)
             .then(r => r.json())
             .then(data => {
+                console.log('QR status response:', data);
                 if (data.status === 'authorized') {
                     document.getElementById('qr-status').textContent = 'Аккаунт успешно подключён!';
                     document.getElementById('qr-success').style.display = '';
