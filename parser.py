@@ -95,27 +95,33 @@ class GroupParser:
         })
         return list(self.unique_ids)
 
+    def normalize_group_link(self, group_link: str) -> str:
+        """Преобразует любой ввод в корректный username/ссылку для Telethon"""
+        group_link = group_link.strip()
+        if group_link.startswith('https://t.me/'):
+            group_link = group_link[len('https://t.me/'):]
+        if group_link.startswith('@'):
+            group_link = group_link[1:]
+        return group_link
+
     async def parse_group(self, group_link: str, limit: int = 100) -> List[str]:
         """Основной метод для парсинга группы"""
         try:
+            # Нормализуем ссылку/username
+            group_link_norm = self.normalize_group_link(group_link)
             # Получаем информацию о группе
-            entity = await self.client.get_entity(group_link)
-            
+            entity = await self.client.get_entity(group_link_norm)
             if not isinstance(entity, (Channel, Chat)):
                 raise ValueError("Указанная ссылка не является группой или каналом")
-
             # Парсим сообщения и собираем username'ы
             usernames = await self.parse_messages(entity, limit)
-            
             # Сохраняем результаты в файл
             output_file = f"parsed_usernames_{entity.id}.txt"
             with open(output_file, 'w', encoding='utf-8') as f:
                 for username in usernames:
                     f.write(f"{username}\n")
-            
             logger.info(f"Парсинг завершен. Найдено {len(usernames)} уникальных username'ов")
             return usernames
-
         except Exception as e:
             logger.error(f"Ошибка при парсинге группы: {str(e)}")
             raise
@@ -128,14 +134,13 @@ async def parse_group_with_account(group_link: str, limit: int, account_config: 
             account_config['api_id'],
             account_config['api_hash']
         )
-        
         await client.start()
         parser = GroupParser(client, task_id)
-        usernames = await parser.parse_group(group_link, limit)
+        # Нормализуем ссылку/username
+        group_link_norm = parser.normalize_group_link(group_link)
+        usernames = await parser.parse_group(group_link_norm, limit)
         await client.disconnect()
-        
         return usernames
-        
     except Exception as e:
         logger.error(f"Ошибка при работе с аккаунтом: {str(e)}")
         # В случае ошибки обновляем статус
