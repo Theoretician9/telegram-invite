@@ -32,6 +32,7 @@
 </div>
 <script>
 let currentTaskId = null;
+let currentResultFile = null;
 
 function pollStatus() {
     if (!currentTaskId) return;
@@ -51,11 +52,13 @@ function pollStatus() {
                 progressText.textContent = 'Парсинг завершён';
                 resultMessage.textContent = data.total ? `Найдено ${data.total} уникальных ID` : 'Парсинг завершён';
                 downloadBtn.disabled = false;
+                currentResultFile = data.file;
             } else if (data.status === 'error') {
                 progressBlock.style.display = 'none';
                 resultMessage.className = 'alert alert-danger';
                 resultMessage.textContent = 'Ошибка: ' + (data.error || 'Неизвестная ошибка');
                 downloadBtn.disabled = true;
+                currentResultFile = null;
             } else {
                 progressBlock.style.display = 'block';
                 const percent = data.progress ? Math.round(data.progress) : 0;
@@ -65,6 +68,7 @@ function pollStatus() {
                 progressText.textContent = `Прогресс: ${percent}%`;
                 resultMessage.textContent = '';
                 downloadBtn.disabled = true;
+                currentResultFile = null;
                 setTimeout(pollStatus, 1000);
             }
         })
@@ -101,8 +105,9 @@ document.getElementById('parse-form').onsubmit = function(e) {
 };
 
 document.getElementById('download-btn').onclick = async function() {
+    if (!currentResultFile) return;
     try {
-        const response = await fetch('/api/parse/download/latest');
+        const response = await fetch(`/api/parse/download/${encodeURIComponent(currentResultFile.replace('chat-logs/',''))}`);
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
