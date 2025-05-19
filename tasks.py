@@ -70,16 +70,16 @@ def get_next_account():
     return accounts[0]
 
 
-def log_invite(task_id, account_name, channel_username, identifier, status, reason=None):
-    """Логирует результат приглашения в базу данных"""
+def log_invite(task_id, account_id, channel_username, identifier, status, reason=None):
+    """Логирует результат приглашения в базу данных (теперь с account_id)"""
     conn = get_db_conn()
     try:
         with conn.cursor() as cur:
             cur.execute("""
                 INSERT INTO invite_logs 
-                (task_id, account_name, channel_username, phone, status, reason)
+                (task_id, account_id, channel_username, phone, status, reason)
                 VALUES (%s, %s, %s, %s, %s, %s)
-            """, (task_id, account_name, channel_username, identifier, status, reason))
+            """, (task_id, account_id, channel_username, identifier, status, reason))
             conn.commit()
     finally:
         conn.close()
@@ -155,7 +155,7 @@ def invite_task(self, identifier, channel_username=None):
             # Логируем результат
             log_invite(
                 task_id=self.request.id,
-                account_name=account['name'],
+                account_id=account['id'],
                 channel_username=channel_username,
                 identifier=identifier,
                 status='invited',
@@ -174,7 +174,7 @@ def invite_task(self, identifier, channel_username=None):
         logging.error(f"Error in invite_task: {str(e)}")
         log_invite(
             task_id=self.request.id,
-            account_name=account['name'] if account else 'unknown',
+            account_id=account['id'] if account else 'unknown',
             channel_username=channel_username,
             identifier=identifier,
             status='failed',
@@ -237,7 +237,7 @@ def bulk_invite_task(self, identifiers, channel_username=None):
                         ))
                     log_invite(
                         task_id=self.request.id,
-                        account_name=account['name'],
+                        account_id=account['id'],
                         channel_username=channel_username,
                         identifier=identifier,
                         status='invited',
@@ -247,7 +247,7 @@ def bulk_invite_task(self, identifiers, channel_username=None):
                     logging.error(f"Error in bulk_invite_task for {identifier}: {str(e)}")
                     log_invite(
                         task_id=self.request.id,
-                        account_name=account['name'],
+                        account_id=account['id'] if account else 'unknown',
                         channel_username=channel_username,
                         identifier=identifier,
                         status='failed',
@@ -265,7 +265,7 @@ def bulk_invite_task(self, identifiers, channel_username=None):
         for identifier in identifiers:
             log_invite(
                 task_id=self.request.id,
-                account_name=account['name'] if account else 'unknown',
+                account_id=account['id'] if account else 'unknown',
                 channel_username=channel_username,
                 identifier=identifier,
                 status='failed',
