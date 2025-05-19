@@ -47,16 +47,14 @@ def get_db_conn():
 
 
 def get_next_account():
-    """Получает следующий доступный аккаунт из конфига"""
+    """Получает следующий доступный аккаунт из конфига и добавляет числовой id из БД по name"""
     cfg_path = os.path.join(os.path.dirname(__file__), 'config.json')
     with open(cfg_path, 'r', encoding='utf-8') as f:
         config = json.load(f)
-    
     accounts = [a for a in config.get('accounts', []) if a.get('is_active')]
     if not accounts:
         return None
-    
-    # Получаем информацию о последнем использовании аккаунтов
+    # Получаем информацию о последнем использовании аккаунтов и id по name
     conn = get_db_conn()
     try:
         with conn.cursor() as cur:
@@ -66,12 +64,16 @@ def get_next_account():
                 GROUP BY account_id
             """)
             last_used = {row['account_id']: row['last_used'] for row in cur.fetchall()}
+            # Получаем id аккаунта по name
+            cur.execute("SELECT id, name FROM accounts")
+            id_by_name = {row['name']: row['id'] for row in cur.fetchall()}
     finally:
         conn.close()
-    
     # Сортируем аккаунты по времени последнего использования
-    accounts.sort(key=lambda x: last_used.get(x.get('id'), datetime.min))
-    return accounts[0]
+    accounts.sort(key=lambda x: last_used.get(id_by_name.get(x.get('name')), datetime.min))
+    acc = accounts[0]
+    acc['id'] = id_by_name.get(acc['name'])
+    return acc
 
 
 def log_invite(task_id, account_id, channel_username, identifier, status, reason=None):
