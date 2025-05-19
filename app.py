@@ -214,7 +214,8 @@ async def api_logs_csv():
     db = SessionLocal()
     try:
         logs = db.query(InviteLog).all()
-        
+        # Получаем все аккаунты для сопоставления id -> name
+        accounts = {acc.id: acc.name for acc in db.query(Account).all()}
         output = StringIO()
         writer = csv.writer(output)
         writer.writerow(['id','task_id','account_name','channel_username','phone','status','reason','created_at'])
@@ -222,7 +223,7 @@ async def api_logs_csv():
             writer.writerow([
                 log.id,
                 log.task_id,
-                log.account_name,
+                accounts.get(log.account_id, ''),
                 log.channel_username,
                 log.phone,
                 log.status,
@@ -231,7 +232,6 @@ async def api_logs_csv():
             ])
         csv_data = output.getvalue()
         output.close()
-        
         return csv_data, 200, {
             'Content-Type': 'text/csv; charset=utf-8',
             'Content-Disposition': 'attachment; filename="invite_logs.csv"'
@@ -410,10 +410,13 @@ async def api_invite_log():
     db = SessionLocal()
     try:
         logs = db.query(InviteLog).order_by(InviteLog.created_at.desc()).limit(100).all()
+        # Получаем все аккаунты для сопоставления id -> name
+        accounts = {acc.id: acc.name for acc in db.query(Account).all()}
         return jsonify([{
             'id': log.id,
             'task_id': log.task_id,
-            'account_name': log.account_name,
+            'account_id': log.account_id,
+            'account_name': accounts.get(log.account_id, ''),
             'channel_username': log.channel_username,
             'phone': log.phone,
             'status': log.status,
