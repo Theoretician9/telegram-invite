@@ -3,8 +3,6 @@ import json
 import logging
 import asyncio
 from datetime import datetime, timedelta
-from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, send_file, session
-from flask_session import Session
 import redis
 import mysql.connector
 from tasks import invite_task
@@ -13,7 +11,6 @@ from parser import parse_group_with_account
 import uuid
 import glob
 from functools import wraps
-
 import csv
 from io import StringIO
 from qr_login import generate_qr_login, poll_qr_login
@@ -51,19 +48,6 @@ SessionLocal = sessionmaker(bind=engine)
 
 # --- Flask app init ---
 app = Quart(__name__)
-app.secret_key = os.getenv('FLASK_SECRET', 'change-me')
-
-# Настройка сессий
-app.config['SESSION_TYPE'] = 'redis'
-app.config['SESSION_REDIS'] = redis.from_url(BROKER_URL)
-app.config['SESSION_PERMANENT'] = True
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=1)
-app.config['SESSION_COOKIE_SECURE'] = False
-app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-app.config['SESSION_USE_SIGNER'] = True
-
-Session(app)
 
 # --- Login required decorator ---
 def login_required(f):
