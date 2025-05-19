@@ -275,6 +275,16 @@ sudo systemctl reload nginx
 - `templates/bulk_invite.html` — добавлен подробный лог, обновлён JS.
 - (Рекомендация) Для задержек между инвайтами требуется дополнительная реализация.
 
+## Май 2025: Полная миграция на Quart + Hypercorn
+- Flask и Flask-Session полностью удалены из проекта и зависимостей.
+- Все view-функции переведены на async/await, используются только импорты Quart.
+- Для серверных сессий используется quart-session с backend на redis.asyncio.
+- Все основные страницы и API работают через Quart, шаблоны восстановлены и доступны.
+- Hypercorn запускается как systemd-сервис (см. telegram_inviter_hypercorn.service), Flask-сервис удалён.
+- Для обновления зависимостей: pip install -U redis quart-session
+- Для перезапуска после деплоя: sudo systemctl restart telegram_inviter_hypercorn.service
+- Все изменения и история миграции зафиксированы в chat_history.md.
+
 ## Миграция на мультиаккаунтность и учёт лимитов (июнь 2024)
 
 ### Новые таблицы
