@@ -433,15 +433,14 @@ def api_add_account():
         db.add(account)
         db.commit()
         db.refresh(account)
-        # Создаём лимиты по пабликам (пока пусто, можно добавить дефолтный канал)
-        # Пример: channels = ["@yourchannel"]
-        # for ch in channels:
-        #     db.add(AccountChannelLimit(account_id=account.id, channel_username=ch, invites_left=200))
         db.commit()
         return jsonify({'status': 'ok', 'account_id': account.id})
     except Exception as e:
         db.rollback()
-        return jsonify({'error': str(e)}), 500
+        import traceback
+        err_text = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+        print(f"[ERROR] /api/accounts/add: {err_text}")
+        return jsonify({'error': err_text}), 500
     finally:
         db.close()
 
