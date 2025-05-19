@@ -128,4 +128,5 @@
 - Для серверных сессий используется quart-session с backend на redis.asyncio.
 - Hypercorn теперь основной сервис, запускается через systemd (telegram_inviter_hypercorn.service).
 - Все основные страницы и API работают, тестирование продолжается.
-- Исправлена проблема с невозможностью скачать результат парсинга (ошибка send_file() got an unexpected keyword argument 'download_name'). Теперь используется ручная установка Content-Disposition, скачивание работает корректно. 
+- Исправлена проблема с невозможностью скачать результат парсинга (ошибка send_file() got an unexpected keyword argument 'download_name'). Теперь используется ручная установка Content-Disposition, скачивание работает корректно.
+- Исправлен endpoint /api/bulk_invite — теперь он только сохраняет файл и ставит задачу в Celery, не читая и не парся файл в самом endpoint. Это устранило блокировку event loop Quart и проблему 502 Bad Gateway при массовом инвайте. 
