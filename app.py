@@ -20,6 +20,7 @@ from qr_login import generate_qr_login, poll_qr_login
 from models import Account, AccountChannelLimit, Base
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from quart import Quart, request, jsonify, render_template, redirect, url_for, flash, send_file, session
 
 # --- Configuration & Logging ---
 BASE_DIR = os.path.dirname(__file__)
@@ -49,7 +50,7 @@ engine = create_engine(DB_URL)
 SessionLocal = sessionmaker(bind=engine)
 
 # --- Flask app init ---
-app = Flask(__name__)
+app = Quart(__name__)
 app.secret_key = os.getenv('FLASK_SECRET', 'change-me')
 
 # Настройка сессий
@@ -449,31 +450,30 @@ def admin_accounts():
     return render_template('admin/accounts.html')
 
 @app.route('/api/accounts/qr_login', methods=['POST'])
-def api_qr_login():
-    data = request.get_json()
+async def api_qr_login():
+    data = await request.get_json()
     api_id = data.get('api_id')
     api_hash = data.get('api_hash')
-    
     if not api_id or not api_hash:
         return jsonify({'error': 'api_id and api_hash required'}), 400
-        
     try:
-        qr_code, token = asyncio.run(generate_qr_login(api_id, api_hash))
-        return jsonify({
-            'status': 'ok',
-            'qr_code': qr_code,
-            'token': token
-        })
+        qr_code, token = await generate_qr_login(api_id, api_hash)
+        return jsonify({'status': 'ok', 'qr_code': qr_code, 'token': token})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/accounts/qr_status/<token>', methods=['GET'])
-def api_qr_status(token):
+async def api_qr_status(token):
     try:
-        status = asyncio.run(poll_qr_login(token))
+        status = await poll_qr_login(token)
         return jsonify(status)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    import hypercorn.asyncio
+    import hypercorn.config
+    config = hypercorn.config.Config()
+    config.bind = ["0.0.0.0:5000"]
+    import asyncio
+    asyncio.run(hypercorn.asyncio.serve(app, config))
