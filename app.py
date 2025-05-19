@@ -372,31 +372,30 @@ async def parse_status():
 async def download_parsed(filename):
     if not filename.endswith('.csv'):
         return jsonify({'error': 'Invalid file type'}), 400
-        
     file_path = os.path.join('chat-logs', filename)
     if not os.path.exists(file_path):
         return jsonify({'error': 'File not found'}), 404
-        
-    return await send_file(
+    response = await send_file(
         file_path,
         mimetype='text/csv',
-        as_attachment=True,
-        download_name=filename
+        as_attachment=True
     )
+    response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
 
 @app.route('/api/parse/download/latest', methods=['GET'])
 async def download_latest_parsed():
     files = glob.glob('chat-logs/*.csv')
     if not files:
         return jsonify({'error': 'No parsed files found'}), 404
-        
     latest = max(files, key=os.path.getctime)
-    return await send_file(
+    response = await send_file(
         latest,
         mimetype='text/csv',
-        as_attachment=True,
-        download_name=os.path.basename(latest)
+        as_attachment=True
     )
+    response.headers['Content-Disposition'] = f'attachment; filename="{os.path.basename(latest)}"'
+    return response
 
 @app.route('/api/bulk_invite', methods=['POST'])
 async def bulk_invite():
