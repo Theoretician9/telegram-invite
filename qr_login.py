@@ -12,6 +12,7 @@ from telethon.tl.types import InputUserSelf
 from PIL import Image
 import qrcode
 import os
+import traceback
 
 QR_SESSIONS = {}
 
@@ -61,4 +62,6 @@ async def poll_qr_login(token):
             }
         }
     except Exception as e:
-        return {'status': 'error', 'error': str(e)} 
+        err_text = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+        print(f"[ERROR] poll_qr_login: {err_text}")
+        return {'status': 'error', 'error': err_text} 
