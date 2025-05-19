@@ -186,9 +186,9 @@ async def bulk_invite_page():
 # --- Webhook handler with immediate alert check ---
 @app.route('/webhook', methods=['GET','POST'], strict_slashes=False)
 @app.route('/webhook/', methods=['GET','POST'], strict_slashes=False)
-def webhook_handler():
-    logging.info(f"Incoming webhook: {request.method} {request.url} data={request.get_data(as_text=True)}")
-    payload = request.get_json(silent=True) or {}
+async def webhook_handler():
+    logging.info(f"Incoming webhook: {request.method} {request.url} data={await request.get_data(as_text=True)}")
+    payload = await request.get_json(silent=True) or {}
     phone = payload.get('phone') or request.args.get('phone')
     if not phone:
         logging.info("Webhook ignored: no phone parameter")
@@ -207,7 +207,7 @@ def webhook_handler():
 
 # --- API logs endpoint ---
 @app.route('/api/logs', methods=['GET'])
-def api_logs():
+async def api_logs():
     try:
         with open(LOG_PATH, 'r', encoding='utf-8') as f:
             text = f.read()
@@ -217,227 +217,231 @@ def api_logs():
 
 # --- API logs CSV endpoint ---
 @app.route('/api/logs/csv', methods=['GET'])
-def api_logs_csv():
+async def api_logs_csv():
     """
     Отдаёт все записи invite_logs в CSV:
     колонки: id, task_id, account_name, channel_username, phone, status, reason, created_at
     """
-    cnx = mysql.connector.connect(
-        host=DB_HOST, port=DB_PORT,
-        user=DB_USER, password=DB_PASSWORD,
-        database=DB_NAME
-    )
-    cursor = cnx.cursor()
-    cursor.execute("""
-        SELECT id, task_id, account_name, channel_username, phone, status, reason, created_at
-        FROM invite_logs
-    """)
-    rows = cursor.fetchall()
-    cursor.close()
-    cnx.close()
-
-    output = StringIO()
-    writer = csv.writer(output)
-    writer.writerow(['id','task_id','account_name','channel_username','phone','status','reason','created_at'])
-    for row in rows:
-        writer.writerow(row)
-    csv_data = output.getvalue()
-    output.close()
-
-    return csv_data, 200, {
-        'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': 'attachment; filename="invite_logs.csv"'
-    }
+    db = SessionLocal()
+    try:
+        logs = db.query(InviteLog).all()
+        
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['id','task_id','account_name','channel_username','phone','status','reason','created_at'])
+        for log in logs:
+            writer.writerow([
+                log.id,
+                log.task_id,
+                log.account_name,
+                log.channel_username,
+                log.phone,
+                log.status,
+                log.reason,
+                log.created_at.isoformat() if log.created_at else None
+            ])
+        csv_data = output.getvalue()
+        output.close()
+        
+        return csv_data, 200, {
+            'Content-Type': 'text/csv; charset=utf-8',
+            'Content-Disposition': 'attachment; filename="invite_logs.csv"'
+        }
+    finally:
+        db.close()
 
 # --- Accounts endpoint ---
 @app.route('/api/accounts', methods=['GET'])
-def api_accounts():
+async def api_accounts():
     db = SessionLocal()
     try:
         accounts = db.query(Account).all()
-        result = []
-        for acc in accounts:
-            result.append({
-                'id': acc.id,
-                'name': acc.name,
-                'phone': '',  # phone не хранится явно, можно добавить если нужно
-                'comment': acc.comment,
-                'is_active': acc.is_active,
-                'last_used': acc.last_used.isoformat() if acc.last_used else None,
-                'created_at': acc.created_at.isoformat() if acc.created_at else None
-            })
-        return jsonify(result)
+        return jsonify([{
+            'id': acc.id,
+            'name': acc.name,
+            'api_id': acc.api_id,
+            'api_hash': acc.api_hash,
+            'session_string': acc.session_string,
+            'created_at': acc.created_at.isoformat() if acc.created_at else None
+        } for acc in accounts])
     finally:
         db.close()
 
 # --- Parser endpoints ---
 @app.route('/api/parse', methods=['POST'])
-def start_parsing():
-    """Запуск процесса парсинга"""
-    try:
-        data = request.get_json()
-        group_link = data.get('group_link')
-        limit = int(data.get('limit', 100))
-        if not group_link:
-            return jsonify({'error': 'Не указана ссылка на группу'}), 400
-        # Получаем конфигурацию аккаунта
-        with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
-            config = json.load(f)
-        if not config.get('accounts'):
-            return jsonify({'error': 'Нет доступных аккаунтов'}), 400
-        account = next((acc for acc in config['accounts'] if acc.get('is_active')), None)
-        if not account:
-            return jsonify({'error': 'Нет активных аккаунтов'}), 400
-        # Генерируем уникальный task_id для статуса
-        task_id = str(uuid.uuid4())
-        # Запускаем парсинг в отдельном потоке
-        def run_parser():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                from parser import parse_group_with_account
-                usernames = loop.run_until_complete(
-                    parse_group_with_account(group_link, limit, account, task_id)
-                )
-                return usernames
-            finally:
-                loop.close()
-        import threading
-        thread = threading.Thread(target=run_parser)
-        thread.start()
-        return jsonify({
-            'status': 'started',
-            'message': 'Парсинг запущен',
-            'task_id': task_id
-        })
-    except Exception as e:
-        logger.error(f"Ошибка при запуске парсинга: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+async def start_parsing():
+    form = await request.form
+    group_link = form.get('group_link')
+    if not group_link:
+        return jsonify({'error': 'No group link provided'}), 400
+
+    # Создаем уникальный ID для этой задачи парсинга
+    task_id = str(uuid.uuid4())
+    
+    # Запускаем парсинг в отдельном потоке
+    def run_parser():
+        try:
+            parse_group_with_account(group_link, task_id)
+        except Exception as e:
+            logging.error(f"Parser error: {e}")
+    
+    # Запускаем в отдельном потоке
+    import threading
+    thread = threading.Thread(target=run_parser)
+    thread.start()
+    
+    return jsonify({
+        'status': 'started',
+        'task_id': task_id
+    })
 
 @app.route('/api/parse/status', methods=['GET'])
-def parse_status():
-    """Получение статуса парсинга"""
-    import redis
+async def parse_status():
     task_id = request.args.get('task_id')
     if not task_id:
-        return jsonify({'error': 'Не указан task_id'}), 400
-    REDIS_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
-    redis_client = redis.Redis.from_url(REDIS_URL)
-    status = redis_client.hgetall(f'parse_status:{task_id}')
-    if not status:
-        return jsonify({'status': 'not_found', 'progress': 0})
-    # Декодируем байты
-    status = {k.decode(): v.decode() for k, v in status.items()}
-    return jsonify(status)
+        return jsonify({'error': 'No task_id provided'}), 400
+        
+    # Проверяем наличие файла с результатами
+    result_file = f'chat-logs/{task_id}.csv'
+    if os.path.exists(result_file):
+        return jsonify({
+            'status': 'completed',
+            'file': result_file
+        })
+    
+    # Проверяем наличие файла с ошибкой
+    error_file = f'chat-logs/{task_id}.error'
+    if os.path.exists(error_file):
+        with open(error_file, 'r', encoding='utf-8') as f:
+            error = f.read()
+        return jsonify({
+            'status': 'error',
+            'error': error
+        })
+    
+    return jsonify({
+        'status': 'in_progress'
+    })
 
 @app.route('/api/parse/download/<filename>', methods=['GET'])
-def download_parsed(filename):
-    """Скачивание результатов парсинга"""
-    try:
-        return send_file(
-            filename,
-            as_attachment=True,
-            download_name=filename
-        )
-    except Exception as e:
-        return jsonify({'error': str(e)}), 404
+async def download_parsed(filename):
+    if not filename.endswith('.csv'):
+        return jsonify({'error': 'Invalid file type'}), 400
+        
+    file_path = os.path.join('chat-logs', filename)
+    if not os.path.exists(file_path):
+        return jsonify({'error': 'File not found'}), 404
+        
+    return await send_file(
+        file_path,
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=filename
+    )
 
 @app.route('/api/parse/download/latest', methods=['GET'])
-def download_latest_parsed():
-    files = glob.glob('parsed_usernames_*.txt')
+async def download_latest_parsed():
+    files = glob.glob('chat-logs/*.csv')
     if not files:
-        return jsonify(error='No files found'), 404
-    latest_file = max(files, key=os.path.getctime)
-    return send_file(latest_file, as_attachment=True)
+        return jsonify({'error': 'No parsed files found'}), 404
+        
+    latest = max(files, key=os.path.getctime)
+    return await send_file(
+        latest,
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=os.path.basename(latest)
+    )
 
 @app.route('/api/bulk_invite', methods=['POST'])
-def bulk_invite():
+async def bulk_invite():
     if 'file' not in request.files:
-        return jsonify(error='No file uploaded'), 400
+        return jsonify({'error': 'No file provided'}), 400
+        
+    file = (await request.files)['file']
+    if not file.filename.endswith('.csv'):
+        return jsonify({'error': 'Only CSV files are allowed'}), 400
+        
+    # Сохраняем файл
+    filename = f'bulk_invite_{uuid.uuid4()}.csv'
+    file_path = os.path.join('chat-logs', filename)
+    await file.save(file_path)
     
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify(error='No file selected'), 400
+    # Читаем телефоны из CSV
+    phones = []
+    with open(file_path, 'r', encoding='utf-8') as f:
+        reader = csv.reader(f)
+        for row in reader:
+            if row and row[0].strip():
+                phones.append(row[0].strip())
     
-    if not file.filename.endswith('.txt'):
-        return jsonify(error='Only .txt files are allowed'), 400
+    # Запускаем задачи
+    for phone in phones:
+        invite_task.delay(phone)
     
-    try:
-        # Читаем файл и получаем список ID
-        usernames = [line.strip() for line in file.read().decode('utf-8').splitlines() if line.strip()]
-        
-        # Получаем настройки из конфига
-        channel = config.get('channel_username')
-        if not channel:
-            return jsonify(error='Channel not configured'), 400
-        
-        # Добавляем задачи в очередь
-        for username in usernames:
-            invite_task.delay(username, channel)
-        
-        return jsonify({
-            'status': 'success',
-            'message': f'Added {len(usernames)} tasks to queue',
-            'count': len(usernames)
-        })
-        
-    except Exception as e:
-        logging.error(f"Error processing bulk invite file: {str(e)}")
-        return jsonify(error=str(e)), 500
+    return jsonify({
+        'status': 'success',
+        'phones_count': len(phones)
+    })
 
 @app.route('/api/invite_log', methods=['GET'])
-def api_invite_log():
-    cnx = mysql.connector.connect(
-        host=DB_HOST, port=DB_PORT,
-        user=DB_USER, password=DB_PASSWORD,
-        database=DB_NAME
-    )
-    cursor = cnx.cursor(dictionary=True)
-    cursor.execute("""
-        SELECT phone, status, reason, created_at
-        FROM invite_logs
-        ORDER BY created_at DESC
-        LIMIT 100
-    """)
-    logs = cursor.fetchall()
-    cursor.close()
-    cnx.close()
-    return jsonify(logs)
-
-@app.route('/api/accounts/add', methods=['POST'])
-def api_add_account():
-    data = request.get_json()
-    session_string = data.get('session_string')
-    api_id = data.get('api_id')
-    api_hash = data.get('api_hash')
-    username = data.get('username')
-    phone = data.get('phone')
-    comment = data.get('comment', '')
-    name = username or phone or f"tg_{datetime.utcnow().timestamp()}"
-    if not session_string or not api_id or not api_hash:
-        return jsonify({'error': 'session_string, api_id, api_hash required'}), 400
+async def api_invite_log():
     db = SessionLocal()
     try:
+        logs = db.query(InviteLog).order_by(InviteLog.created_at.desc()).limit(100).all()
+        return jsonify([{
+            'id': log.id,
+            'task_id': log.task_id,
+            'account_name': log.account_name,
+            'channel_username': log.channel_username,
+            'phone': log.phone,
+            'status': log.status,
+            'reason': log.reason,
+            'created_at': log.created_at.isoformat() if log.created_at else None
+        } for log in logs])
+    finally:
+        db.close()
+
+@app.route('/api/accounts/add', methods=['POST'])
+async def api_add_account():
+    data = await request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+        
+    required_fields = ['name', 'api_id', 'api_hash']
+    for field in required_fields:
+        if field not in data:
+            return jsonify({'error': f'Missing required field: {field}'}), 400
+            
+    db = SessionLocal()
+    try:
+        # Проверяем, нет ли уже аккаунта с таким именем
+        existing = db.query(Account).filter_by(name=data['name']).first()
+        if existing:
+            return jsonify({'error': 'Account with this name already exists'}), 400
+            
+        # Создаем новый аккаунт
         account = Account(
-            name=name,
-            api_id=api_id,
-            api_hash=api_hash,
-            session_string=session_string,
-            is_active=True,
-            created_at=datetime.utcnow(),
-            comment=comment
+            name=data['name'],
+            api_id=data['api_id'],
+            api_hash=data['api_hash']
         )
         db.add(account)
         db.commit()
-        db.refresh(account)
-        db.commit()
-        return jsonify({'status': 'ok', 'account_id': account.id})
+        
+        return jsonify({
+            'status': 'success',
+            'account': {
+                'id': account.id,
+                'name': account.name,
+                'api_id': account.api_id,
+                'api_hash': account.api_hash,
+                'created_at': account.created_at.isoformat() if account.created_at else None
+            }
+        })
     except Exception as e:
         db.rollback()
-        import traceback
-        err_text = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
-        print(f"[ERROR] /api/accounts/add: {err_text}")
-        return jsonify({'error': err_text}), 500
+        return jsonify({'error': str(e)}), 500
     finally:
         db.close()
 
