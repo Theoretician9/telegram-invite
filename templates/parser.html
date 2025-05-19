@@ -79,7 +79,6 @@ document.getElementById('parse-form').onsubmit = function(e) {
     const limit = document.getElementById('limit').value;
     document.getElementById('parse-status').innerHTML = '';
     document.getElementById('progress-block').style.display = 'none';
-    document.getElementById('result-block').style.display = 'none';
     fetch('/api/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -91,7 +90,6 @@ document.getElementById('parse-form').onsubmit = function(e) {
             currentTaskId = data.task_id;
             document.getElementById('parse-status').innerHTML = `<div class='alert alert-info'>Парсинг запущен. Task ID: ${data.task_id}</div>`;
             document.getElementById('progress-block').style.display = 'block';
-            document.getElementById('result-block').style.display = 'none';
             pollStatus();
         } else {
             document.getElementById('parse-status').innerHTML = `<div class='alert alert-danger'>Ошибка: ${data.error || data.message}</div>`;
