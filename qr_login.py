@@ -36,6 +36,17 @@ async def generate_qr_login(api_id, api_hash):
     print(f"[QR] Generated token: {token}, QR_SESSIONS keys: {list(QR_SESSIONS.keys())}")
     return qr_b64, token
 
+async def try_get_me(client, attempts=5, delay=2):
+    for i in range(attempts):
+        try:
+            me = await client.get_me()
+            if me:
+                return me
+        except Exception as e:
+            print(f"[QR] try_get_me attempt {i+1} failed: {e}")
+        await asyncio.sleep(delay)
+    return None
+
 async def poll_qr_login(token):
     print(f"[QR] poll_qr_login called with token: {token}, QR_SESSIONS keys: {list(QR_SESSIONS.keys())}")
     session = QR_SESSIONS.get(token)
@@ -45,33 +56,28 @@ async def poll_qr_login(token):
     client = session['client']
     qr_login = session['qr_login']
     try:
-        # Пробуем дождаться события авторизации
         try:
             await asyncio.wait_for(qr_login.wait(), timeout=30)
         except Exception as e:
-            print(f"[QR] wait() exception for token: {token}: {e}, пробуем get_me()")
-        # В любом случае (даже если был timeout или другая ошибка) — пробуем получить пользователя
-        try:
-            me = await client.get_me()
-            if me:
-                session_string = client.session.save()
-                session['session_string'] = session_string
-                session['user'] = me
-                await client.disconnect()
-                print("[QR] Session is active! Returning authorized.")
-                return {
-                    'status': 'authorized',
-                    'session_string': session_string,
-                    'user': {
-                        'id': me.id,
-                        'username': me.username,
-                        'phone': me.phone,
-                        'first_name': me.first_name,
-                        'last_name': me.last_name
-                    }
+            print(f"[QR] wait() exception for token: {token}: {e}, пробуем try_get_me()")
+        me = await try_get_me(client, attempts=5, delay=2)
+        if me:
+            session_string = client.session.save()
+            session['session_string'] = session_string
+            session['user'] = me
+            await client.disconnect()
+            print("[QR] Session is active! Returning authorized.")
+            return {
+                'status': 'authorized',
+                'session_string': session_string,
+                'user': {
+                    'id': me.id,
+                    'username': me.username,
+                    'phone': me.phone,
+                    'first_name': me.first_name,
+                    'last_name': me.last_name
                 }
-        except Exception as e:
-            print(f"[QR] get_me failed: {e}")
+            }
         print(f"[QR] QR-код устарел или не авторизован.")
         return {'status': 'timeout', 'error': 'QR-код устарел. Попробуйте сгенерировать новый.'}
     except Exception as e:
