@@ -51,8 +51,14 @@ function pollStatus() {
                 progressBar.setAttribute('aria-valuenow', '100');
                 progressText.textContent = 'Парсинг завершён';
                 resultMessage.textContent = data.total ? `Найдено ${data.total} уникальных ID` : 'Парсинг завершён';
+                if (data.file) {
+                    currentResultFile = data.file;
+                } else if (currentTaskId) {
+                    currentResultFile = `chat-logs/${currentTaskId}.csv`;
+                } else {
+                    currentResultFile = null;
+                }
                 downloadBtn.disabled = false;
-                currentResultFile = data.file;
             } else if (data.status === 'error') {
                 progressBlock.style.display = 'none';
                 resultMessage.className = 'alert alert-danger';
@@ -105,9 +111,14 @@ document.getElementById('parse-form').onsubmit = function(e) {
 };
 
 document.getElementById('download-btn').onclick = async function() {
-    if (!currentResultFile) return;
+    let filePath = currentResultFile;
+    if (!filePath && currentTaskId) {
+        filePath = `chat-logs/${currentTaskId}.csv`;
+    }
+    if (!filePath) return;
     try {
-        const response = await fetch(`/api/parse/download/${encodeURIComponent(currentResultFile.replace('chat-logs/',''))}`);
+        const response = await fetch(`/api/parse/download/${encodeURIComponent(filePath.replace('chat-logs/',''))}`);
+        if (!response.ok) throw new Error('File not found');
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
