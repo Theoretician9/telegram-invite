@@ -17,7 +17,7 @@ from functools import wraps
 import csv
 from io import StringIO
 from qr_login import generate_qr_login, poll_qr_login
-from models import Account, AccountChannelLimit, Base
+from models import Account, AccountChannelLimit, Base, InviteLog
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from quart import Quart, request, jsonify, render_template, redirect, url_for, flash, send_file, session
@@ -262,7 +262,10 @@ async def api_accounts():
             'api_id': acc.api_id,
             'api_hash': acc.api_hash,
             'session_string': acc.session_string,
-            'created_at': acc.created_at.isoformat() if acc.created_at else None
+            'is_active': acc.is_active,
+            'last_used': acc.last_used.isoformat() if acc.last_used else None,
+            'created_at': acc.created_at.isoformat() if acc.created_at else None,
+            'comment': acc.comment or ''
         } for acc in accounts])
     finally:
         db.close()
@@ -408,7 +411,7 @@ async def api_add_account():
     if not data:
         return jsonify({'error': 'No data provided'}), 400
         
-    required_fields = ['name', 'api_id', 'api_hash']
+    required_fields = ['name', 'api_id', 'api_hash', 'session_string']
     for field in required_fields:
         if field not in data:
             return jsonify({'error': f'Missing required field: {field}'}), 400
@@ -424,7 +427,10 @@ async def api_add_account():
         account = Account(
             name=data['name'],
             api_id=data['api_id'],
-            api_hash=data['api_hash']
+            api_hash=data['api_hash'],
+            session_string=data['session_string'],
+            is_active=data.get('is_active', True),
+            comment=data.get('comment', '')
         )
         db.add(account)
         db.commit()
@@ -436,7 +442,11 @@ async def api_add_account():
                 'name': account.name,
                 'api_id': account.api_id,
                 'api_hash': account.api_hash,
-                'created_at': account.created_at.isoformat() if account.created_at else None
+                'session_string': account.session_string,
+                'is_active': account.is_active,
+                'last_used': account.last_used.isoformat() if account.last_used else None,
+                'created_at': account.created_at.isoformat() if account.created_at else None,
+                'comment': account.comment or ''
             }
         })
     except Exception as e:
