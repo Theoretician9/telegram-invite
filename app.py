@@ -403,8 +403,8 @@ async def bulk_invite():
     if 'file' not in files:
         return jsonify({'error': 'No file provided'}), 400
     file = files['file']
-    if not file.filename.endswith('.csv'):
-        return jsonify({'error': 'Only CSV files are allowed'}), 400
+    if not (file.filename.endswith('.csv') or file.filename.endswith('.txt')):
+        return jsonify({'error': 'Only TXT or CSV files are allowed'}), 400
     # Сохраняем файл
     filename = f'bulk_invite_{uuid.uuid4()}.csv'
     file_path = os.path.join('chat-logs', filename)
