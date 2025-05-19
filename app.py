@@ -349,31 +349,33 @@ async def download_latest_parsed():
 async def bulk_invite():
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
-        
+    
     file = (await request.files)['file']
     if not file.filename.endswith('.csv'):
         return jsonify({'error': 'Only CSV files are allowed'}), 400
-        
+    
     # Сохраняем файл
     filename = f'bulk_invite_{uuid.uuid4()}.csv'
     file_path = os.path.join('chat-logs', filename)
     await file.save(file_path)
     
-    # Читаем телефоны из CSV
-    phones = []
+    # Читаем телефоны/username из CSV
+    identifiers = []
     with open(file_path, 'r', encoding='utf-8') as f:
-        reader = csv.reader(f)
+        import csv as pycsv
+        reader = pycsv.reader(f)
         for row in reader:
             if row and row[0].strip():
-                phones.append(row[0].strip())
+                identifiers.append(row[0].strip())
     
-    # Запускаем задачи
-    for phone in phones:
-        invite_task.delay(phone)
+    # Запускаем одну групповую задачу
+    from tasks import bulk_invite_task
+    result = bulk_invite_task.delay(identifiers)
     
     return jsonify({
         'status': 'success',
-        'phones_count': len(phones)
+        'task_id': result.id,
+        'phones_count': len(identifiers)
     })
 
 @app.route('/api/invite_log', methods=['GET'])
