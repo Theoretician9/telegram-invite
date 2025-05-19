@@ -99,6 +99,10 @@ def invite_task(self, identifier, channel_username=None):
         with open(cfg_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
 
+        # Получаем настройки паузы
+        pause_min = float(config.get('pause_min_seconds', 1))
+        pause_max = float(config.get('pause_max_seconds', 3))
+
         # Получаем настройки из конфига
         if not channel_username:
             channel_username = config.get('channel_username')
@@ -157,6 +161,11 @@ def invite_task(self, identifier, channel_username=None):
                 status='invited',
                 reason=''
             )
+
+            # Пауза между инвайтами
+            pause = random.uniform(pause_min, pause_max)
+            logging.info(f"[invite_task] Pause {pause:.2f} seconds between invites")
+            time.sleep(pause)
 
         finally:
             client.disconnect()
