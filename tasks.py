@@ -8,6 +8,10 @@ import pymysql
 import json
 from datetime import datetime
 import redis
+from models import GeneratedPost, Base
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine
+import openai
 
 from celery_app import app
 from telethon.sync import TelegramClient
@@ -33,6 +37,11 @@ DB_PASS = os.getenv('DB_PASS', 'QyA9fWbh56Ln')
 
 REDIS_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
 redis_client = redis.Redis.from_url(REDIS_URL)
+
+# Для работы с БД
+DB_URL = os.getenv('DB_URL') or 'mysql+pymysql://telegraminvi:QyA9fWbh56Ln@127.0.0.1/telegraminvi'
+engine = create_engine(DB_URL)
+SessionLocal = sessionmaker(bind=engine)
 
 
 def get_db_conn():
@@ -262,3 +271,77 @@ def bulk_invite_task(self, channel_username, file_path):
     except Exception as e:
         logging.error(f"[bulk_invite_task] Error: {str(e)}")
         raise
+
+
+@app.task
+def analyze_book_task(book_path, prompt, gpt_api_key):
+    # Читает книгу, отправляет в GPT, сохраняет summary/идеи в файл
+    with open(book_path, 'r', encoding='utf-8') as f:
+        book_text = f.read()
+    openai.api_key = gpt_api_key
+    # Для больших книг — разбивать на части, здесь только первые 10000 символов
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": "Ты литературный редактор. Проанализируй книгу и выдели основные смыслы, главы, идеи, сюжетные линии, персонажей, факты, цитаты. Подготовь материал для генерации 100+ уникальных постов."},
+            {"role": "user", "content": f"{prompt}\n\n{book_text[:10000]}"}
+        ]
+    )
+    summary = response['choices'][0]['message']['content']
+    analysis_path = book_path + '.analysis.txt'
+    with open(analysis_path, 'w', encoding='utf-8') as f:
+        f.write(summary)
+    return summary
+
+
+@app.task
+def generate_post_task(analysis_path, prompt, gpt_api_key):
+    # Генерирует пост по анализу и промпту, сохраняет в БД
+    with open(analysis_path, 'r', encoding='utf-8') as f:
+        analysis = f.read()
+    openai.api_key = gpt_api_key
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": "Ты литературный редактор. Используй анализ книги для создания уникального поста."},
+            {"role": "user", "content": f"{prompt}\n\n{analysis}"}
+        ]
+    )
+    post = response['choices'][0]['message']['content']
+    # Сохраняем пост в БД
+    db = SessionLocal()
+    try:
+        new_post = GeneratedPost(
+            book_filename=os.path.basename(analysis_path).replace('.analysis.txt',''),
+            prompt=prompt,
+            content=post,
+            published=False,
+            created_at=datetime.utcnow()
+        )
+        db.add(new_post)
+        db.commit()
+    finally:
+        db.close()
+    return post
+
+
+@app.task
+def autopost_task(schedule, telegram_bot_token):
+    # schedule: строка вида '09:00,13:00,18:00'
+    import time
+    from telegram import Bot
+    db = SessionLocal()
+    try:
+        times = [s.strip() for s in schedule.split(',') if s.strip()]
+        posts = db.query(GeneratedPost).filter_by(published=False).order_by(GeneratedPost.created_at).all()
+        bot = Bot(token=telegram_bot_token)
+        for i, post in enumerate(posts):
+            # Ждём до нужного времени (упрощённо: публикуем сразу)
+            # В реальной задаче — cron или отдельный воркер
+            bot.send_message(chat_id='@your_channel', text=post.content)
+            post.published = True
+            post.published_at = datetime.utcnow()
+            db.commit()
+            time.sleep(5)  # Для теста, потом убрать
+    finally:
+        db.close()
