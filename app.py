@@ -603,14 +603,15 @@ async def upload_book():
 async def save_keys():
     form = await request.form
     gpt_api_key = form.get('gpt_api_key')
+    gpt_model = form.get('gpt_model', 'gpt-3.5-turbo')
     telegram_bot_token = form.get('telegram_bot_token')
     analysis_prompt = form.get('analysis_prompt')
     post_prompt = form.get('post_prompt')
-    
-    # Сохраняем ключи и промпты в файл
+    # Сохраняем ключи, модель и промпты в файл
     with open('book_analyzer_config.json', 'w', encoding='utf-8') as f:
         json.dump({
             'gpt_api_key': gpt_api_key,
+            'gpt_model': gpt_model,
             'telegram_bot_token': telegram_bot_token,
             'analysis_prompt': analysis_prompt,
             'post_prompt': post_prompt
@@ -625,13 +626,15 @@ async def get_prompts():
         return jsonify({
             'status': 'ok',
             'analysis_prompt': config.get('analysis_prompt', ''),
-            'post_prompt': config.get('post_prompt', '')
+            'post_prompt': config.get('post_prompt', ''),
+            'gpt_model': config.get('gpt_model', 'gpt-3.5-turbo')
         })
     except FileNotFoundError:
         return jsonify({
             'status': 'ok',
             'analysis_prompt': '',
-            'post_prompt': ''
+            'post_prompt': '',
+            'gpt_model': 'gpt-3.5-turbo'
         })
 
 @app.route('/api/book_analyzer/analyze_book', methods=['POST'])
@@ -641,13 +644,14 @@ async def analyze_book():
     # Читаем конфиг
     with open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
+    gpt_model = config.get('gpt_model', 'gpt-3.5-turbo')
     # Для простоты берём последнюю загруженную книгу
     books = sorted(os.listdir(UPLOAD_DIR), key=lambda x: os.path.getctime(os.path.join(UPLOAD_DIR, x)), reverse=True)
     if not books:
         return jsonify({'error': 'No book uploaded'}), 400
     book_path = os.path.join(UPLOAD_DIR, books[0])
     from tasks import analyze_book_task
-    analyze_book_task.delay(book_path, prompt, config['gpt_api_key'])
+    analyze_book_task.delay(book_path, prompt, config['gpt_api_key'], gpt_model)
     return jsonify({'status': 'started'})
 
 @app.route('/api/book_analyzer/generate_post', methods=['POST'])

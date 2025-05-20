@@ -23,6 +23,14 @@
           <input type="text" class="form-control" id="gpt_api_key" name="gpt_api_key" required>
         </div>
         <div class="mb-3">
+          <label for="gpt_model" class="form-label">Модель GPT</label>
+          <select class="form-control" id="gpt_model" name="gpt_model" required>
+            <option value="gpt-3.5-turbo">gpt-3.5-turbo (дёшево, быстро)</option>
+            <option value="gpt-4">gpt-4 (дорого, качественно)</option>
+            <option value="gpt-4o">gpt-4o (новая, быстро и качественно)</option>
+          </select>
+        </div>
+        <div class="mb-3">
           <label for="telegram_bot_token" class="form-label">Telegram Bot Token</label>
           <input type="text" class="form-control" id="telegram_bot_token" name="telegram_bot_token" required>
         </div>
@@ -141,6 +149,27 @@ document.getElementById('keys-form').onsubmit = async function(e) {
 
 document.getElementById('analyze-form').onsubmit = async function(e) {
     e.preventDefault();
+    // Оценка стоимости
+    const bookInput = document.getElementById('book');
+    let fileSize = 0;
+    if (bookInput && bookInput.files && bookInput.files[0]) {
+        fileSize = bookInput.files[0].size;
+    } else {
+        // Если файл уже загружен, попробуем получить размер с сервера (опционально)
+        fileSize = 1000000; // по умолчанию 1 МБ
+    }
+    const model = document.getElementById('gpt_model').value;
+    let chunkSize = 8000;
+    let pricePer1k = 0.01;
+    if (model === 'gpt-3.5-turbo') { chunkSize = 40000; pricePer1k = 0.001; }
+    if (model === 'gpt-4') { chunkSize = 20000; pricePer1k = 0.03; }
+    if (model === 'gpt-4o') { chunkSize = 320000; pricePer1k = 0.005; }
+    const totalChunks = Math.ceil(fileSize / chunkSize);
+    const totalTokens = Math.ceil(fileSize / 4); // 1 токен ≈ 4 символа
+    const price = ((totalTokens / 1000) * pricePer1k).toFixed(2);
+    if (!confirm(`Анализ книги займёт примерно ${totalChunks} запросов к GPT (${totalTokens} токенов).\nОриентировочная стоимость: $${price}.\nПродолжить?`)) {
+        return;
+    }
     const formData = new FormData(this);
     const resp = await fetch('/api/book_analyzer/analyze_book', {method: 'POST', body: formData});
     const data = await resp.json();
