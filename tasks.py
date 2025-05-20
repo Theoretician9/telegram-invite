@@ -307,16 +307,16 @@ def split_text_into_chunks(text, chunk_size=8000):
     return chunks
 
 def analyze_chunk(chunk, gpt_api_key, analysis_prompt):
-    """Анализирует часть текста через GPT."""
-    openai.api_key = gpt_api_key
-    response = openai.ChatCompletion.create(
+    """Анализирует часть текста через GPT (openai>=1.0.0)."""
+    client = openai.OpenAI(api_key=gpt_api_key)
+    response = client.chat.completions.create(
         model="gpt-4",
         messages=[
             {"role": "system", "content": analysis_prompt},
             {"role": "user", "content": chunk}
         ]
     )
-    return response['choices'][0]['message']['content']
+    return response.choices[0].message.content
 
 @app.task
 def analyze_book_task(book_path, additional_prompt, gpt_api_key):
@@ -375,18 +375,17 @@ def generate_post_task(analysis_path, prompt, gpt_api_key):
     post_prompt = config['post_prompt']
     if prompt:
         post_prompt += f"\n\nДополнительное задание: {prompt}"
-    
     with open(analysis_path, 'r', encoding='utf-8') as f:
         analysis = f.read()
-    openai.api_key = gpt_api_key
-    response = openai.ChatCompletion.create(
+    client = openai.OpenAI(api_key=gpt_api_key)
+    response = client.chat.completions.create(
         model="gpt-4",
         messages=[
             {"role": "system", "content": post_prompt},
             {"role": "user", "content": f"Создай пост на тему: {prompt}\n\nИспользуй этот анализ книги:\n{analysis}"}
         ]
     )
-    post = response['choices'][0]['message']['content']
+    post = response.choices[0].message.content
     # Сохраняем пост в БД
     db = SessionLocal()
     try:
