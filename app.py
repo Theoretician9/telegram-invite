@@ -53,6 +53,7 @@ SessionLocal = sessionmaker(bind=engine)
 app = Quart(__name__)
 app.config['SESSION_TYPE'] = 'redis'
 app.config['SESSION_REDIS'] = aioredis.from_url(BROKER_URL)
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 МБ
 Session(app)
 
 # --- Login required decorator ---
@@ -694,6 +695,10 @@ async def posts_log():
         ])
     finally:
         db.close()
+
+@app.errorhandler(413)
+async def too_large(e):
+    return jsonify({'status': 'error', 'error': 'Файл слишком большой!'}), 413
 
 if __name__ == '__main__':
     import hypercorn.asyncio
