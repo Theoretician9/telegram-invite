@@ -327,45 +327,44 @@ def analyze_book_task(book_path, additional_prompt, gpt_api_key):
     analysis_prompt = config['analysis_prompt']
     if additional_prompt:
         analysis_prompt += f"\n\nДополнительное задание: {additional_prompt}"
-    
     # Определяем формат файла и читаем текст
     if book_path.lower().endswith('.pdf'):
         text = extract_text_from_pdf(book_path)
     else:
         with open(book_path, 'r', encoding='utf-8') as f:
             text = f.read()
-    
     # Разбиваем текст на части
     chunks = split_text_into_chunks(text)
-    
-    # Анализируем каждую часть
-    analyses = []
-    for i, chunk in enumerate(chunks):
-        analysis = analyze_chunk(chunk, gpt_api_key, analysis_prompt)
-        try:
-            # Пытаемся распарсить JSON
-            analysis_json = json.loads(analysis)
-            analyses.append(analysis_json)
-        except json.JSONDecodeError:
-            # Если не получилось - сохраняем как есть
-            analyses.append({"raw_analysis": analysis})
-    
-    # Объединяем результаты анализа
-    combined_analysis = {
-        "book_name": os.path.basename(book_path),
-        "analysis_date": datetime.now().isoformat(),
-        "total_chunks": len(chunks),
-        "analyses": analyses
-    }
-    
-    # Сохраняем результат
-    analysis_filename = os.path.basename(book_path) + '.analysis.json'
-    analysis_path = os.path.join(ANALYSES_DIR, analysis_filename)
-    
-    with open(analysis_path, 'w', encoding='utf-8') as f:
-        json.dump(combined_analysis, f, ensure_ascii=False, indent=2)
-    
-    return analysis_path
+    # --- Сохраняем статус started ---
+    status_key = f"analyze_status:{os.path.basename(book_path)}"
+    redis_client.hmset(status_key, {"status": "started", "progress": 0, "total": len(chunks)})
+    try:
+        analyses = []
+        for i, chunk in enumerate(chunks):
+            analysis = analyze_chunk(chunk, gpt_api_key, analysis_prompt)
+            try:
+                analysis_json = json.loads(analysis)
+                analyses.append(analysis_json)
+            except json.JSONDecodeError:
+                analyses.append({"raw_analysis": analysis})
+            # --- Обновляем прогресс ---
+            redis_client.hmset(status_key, {"status": "in_progress", "progress": i+1, "total": len(chunks)})
+        combined_analysis = {
+            "book_name": os.path.basename(book_path),
+            "analysis_date": datetime.now().isoformat(),
+            "total_chunks": len(chunks),
+            "analyses": analyses
+        }
+        analysis_filename = os.path.basename(book_path) + '.analysis.json'
+        analysis_path = os.path.join(ANALYSES_DIR, analysis_filename)
+        with open(analysis_path, 'w', encoding='utf-8') as f:
+            json.dump(combined_analysis, f, ensure_ascii=False, indent=2)
+        # --- Статус done ---
+        redis_client.hmset(status_key, {"status": "done", "progress": len(chunks), "total": len(chunks), "result_path": analysis_path})
+        return analysis_path
+    except Exception as e:
+        redis_client.hmset(status_key, {"status": "error", "error": str(e)})
+        raise
 
 
 @app.task

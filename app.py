@@ -698,6 +698,25 @@ async def posts_log():
     finally:
         db.close()
 
+@app.route('/api/book_analyzer/analyze_status', methods=['GET'])
+async def analyze_status():
+    # Для простоты берём последнюю загруженную книгу
+    UPLOAD_DIR = os.path.join(os.path.dirname(__file__), 'uploads')
+    books = sorted(os.listdir(UPLOAD_DIR), key=lambda x: os.path.getctime(os.path.join(UPLOAD_DIR, x)), reverse=True)
+    if not books:
+        return jsonify({'status': 'no_book'})
+    book_filename = books[0]
+    import redis
+    REDIS_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
+    redis_client = redis.Redis.from_url(REDIS_URL)
+    status_key = f'analyze_status:{book_filename}'
+    status = redis_client.hgetall(status_key)
+    if not status:
+        return jsonify({'status': 'not_started'})
+    # Декодируем байты
+    result = {k.decode(): v.decode() for k, v in status.items()}
+    return jsonify(result)
+
 @app.errorhandler(413)
 async def too_large(e):
     return jsonify({'status': 'error', 'error': 'Файл слишком большой!'}), 413
