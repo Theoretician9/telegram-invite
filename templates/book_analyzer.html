@@ -55,6 +55,59 @@
   </div>
 </div>
 <script>
-// TODO: JS для отправки форм и обновления лога постов
+document.getElementById('book-form').onsubmit = async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const resp = await fetch('/api/book_analyzer/upload_book', {method: 'POST', body: formData});
+    const data = await resp.json();
+    alert(data.status === 'ok' ? 'Книга загружена!' : data.error);
+};
+
+document.getElementById('keys-form').onsubmit = async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const resp = await fetch('/api/book_analyzer/save_keys', {method: 'POST', body: formData});
+    const data = await resp.json();
+    alert(data.status === 'ok' ? 'Ключи сохранены!' : data.error);
+};
+
+document.getElementById('analyze-form').onsubmit = async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const resp = await fetch('/api/book_analyzer/analyze_book', {method: 'POST', body: formData});
+    const data = await resp.json();
+    alert(data.status === 'started' ? 'Анализ запущен!' : data.error);
+};
+
+document.getElementById('generate-form').onsubmit = async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const resp = await fetch('/api/book_analyzer/generate_post', {method: 'POST', body: formData});
+    const data = await resp.json();
+    alert(data.status === 'started' ? 'Генерация поста запущена!' : data.error);
+};
+
+document.getElementById('autopost-form').onsubmit = async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const resp = await fetch('/api/book_analyzer/start_autopost', {method: 'POST', body: formData});
+    const data = await resp.json();
+    alert(data.status === 'started' ? 'Автопостинг запущен!' : data.error);
+};
+
+async function updatePostsLog() {
+    const resp = await fetch('/api/book_analyzer/posts_log');
+    const posts = await resp.json();
+    const logDiv = document.getElementById('posts-log');
+    logDiv.innerHTML = posts.map(post => `
+        <div class="mb-2 p-2 border ${post.published ? 'border-success' : 'border-secondary'}">
+            <b>${post.published ? '✅' : '🕓'} ${post.created_at}</b><br>
+            <span>${post.content.substring(0, 200)}${post.content.length > 200 ? '...' : ''}</span><br>
+            <small>Статус: ${post.published ? 'Опубликован' : 'Ожидает'}</small>
+        </div>
+    `).join('');
+}
+setInterval(updatePostsLog, 5000);
+updatePostsLog();
 </script>
 {% endblock %} 
