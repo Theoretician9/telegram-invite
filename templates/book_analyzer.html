@@ -6,8 +6,8 @@
     <div class="card-body">
       <form id="book-form" enctype="multipart/form-data" method="post" action="/api/book_analyzer/upload_book">
         <div class="mb-3">
-          <label for="book_file" class="form-label">Загрузите книгу (txt, docx, pdf)</label>
-          <input type="file" class="form-control" id="book_file" name="book_file" required>
+          <label for="book" class="form-label">Загрузите книгу (txt, docx, pdf)</label>
+          <input type="file" class="form-control" id="book" name="book" accept=".txt,.pdf" required>
         </div>
         <button type="submit" class="btn btn-primary">Загрузить книгу</button>
       </form>
@@ -21,13 +21,46 @@
           <label for="telegram_bot_token" class="form-label">Telegram Bot Token</label>
           <input type="text" class="form-control" id="telegram_bot_token" name="telegram_bot_token" required>
         </div>
+        <div class="mb-3">
+          <label for="analysis_prompt" class="form-label">Промпт для анализа</label>
+          <textarea class="form-control" id="analysis_prompt" name="analysis_prompt" rows="4" required>Ты литературный редактор. Проанализируй текст и выдели:
+1. Основные темы и идеи
+2. Ключевые моменты
+3. Важные цитаты
+4. Персонажи (если есть)
+5. Сюжетные линии (если есть)
+Формат ответа - JSON.</textarea>
+        </div>
+        <div class="mb-3">
+          <label for="post_prompt" class="form-label">Промпт для постов</label>
+          <textarea class="form-control" id="post_prompt" name="post_prompt" rows="8" required>Ты создаёшь посты для Telegram-канала. Правила:
+1. Длина поста: 200-400 слов
+2. Структура:
+   - Захватывающий заголовок
+   - 2-3 абзаца основного текста
+   - Заключение или призыв к действию
+3. Стиль:
+   - Живой, разговорный язык
+   - Короткие предложения
+   - Эмодзи для выделения ключевых моментов
+   - Хештеги в конце (3-5 штук)
+4. Форматирование:
+   - Абзацы разделены пустыми строками
+   - Важные мысли выделены *жирным*
+   - Цитаты в кавычках
+5. Содержание:
+   - Интересные факты из книги
+   - Практические выводы
+   - Связь с современностью
+   - Личный взгляд на материал</textarea>
+        </div>
         <button type="submit" class="btn btn-secondary">Сохранить</button>
       </form>
       <hr>
       <form id="analyze-form" method="post" action="/api/book_analyzer/analyze_book">
         <div class="mb-3">
-          <label for="prompt" class="form-label">Промпт для анализа</label>
-          <input type="text" class="form-control" id="prompt" name="prompt" required>
+          <label for="prompt" class="form-label">Дополнительный промпт для анализа</label>
+          <input type="text" class="form-control" id="prompt" name="prompt" placeholder="Например: 'Проанализируй книгу с точки зрения психологии'">
         </div>
         <button type="submit" class="btn btn-success">Запустить анализ книги</button>
       </form>
@@ -109,5 +142,20 @@ async function updatePostsLog() {
 }
 setInterval(updatePostsLog, 5000);
 updatePostsLog();
+
+// Загружаем сохраненные промпты при открытии страницы
+async function loadPrompts() {
+    try {
+        const resp = await fetch('/api/book_analyzer/get_prompts');
+        const data = await resp.json();
+        if (data.status === 'ok') {
+            document.getElementById('analysis_prompt').value = data.analysis_prompt;
+            document.getElementById('post_prompt').value = data.post_prompt;
+        }
+    } catch (error) {
+        console.error('Error loading prompts:', error);
+    }
+}
+loadPrompts();
 </script>
 {% endblock %} 

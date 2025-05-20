@@ -587,25 +587,50 @@ async def save_keys():
     form = await request.form
     gpt_api_key = form.get('gpt_api_key')
     telegram_bot_token = form.get('telegram_bot_token')
-    # Сохраняем ключи в отдельный файл (или БД)
-    with open('book_analyzer_keys.json', 'w', encoding='utf-8') as f:
-        json.dump({'gpt_api_key': gpt_api_key, 'telegram_bot_token': telegram_bot_token}, f)
+    analysis_prompt = form.get('analysis_prompt')
+    post_prompt = form.get('post_prompt')
+    
+    # Сохраняем ключи и промпты в файл
+    with open('book_analyzer_config.json', 'w', encoding='utf-8') as f:
+        json.dump({
+            'gpt_api_key': gpt_api_key,
+            'telegram_bot_token': telegram_bot_token,
+            'analysis_prompt': analysis_prompt,
+            'post_prompt': post_prompt
+        }, f, ensure_ascii=False, indent=2)
     return jsonify({'status': 'ok'})
+
+@app.route('/api/book_analyzer/get_prompts', methods=['GET'])
+async def get_prompts():
+    try:
+        with open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        return jsonify({
+            'status': 'ok',
+            'analysis_prompt': config.get('analysis_prompt', ''),
+            'post_prompt': config.get('post_prompt', '')
+        })
+    except FileNotFoundError:
+        return jsonify({
+            'status': 'ok',
+            'analysis_prompt': '',
+            'post_prompt': ''
+        })
 
 @app.route('/api/book_analyzer/analyze_book', methods=['POST'])
 async def analyze_book():
     form = await request.form
     prompt = form.get('prompt')
+    # Читаем конфиг
+    with open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
+        config = json.load(f)
     # Для простоты берём последнюю загруженную книгу
-    books = sorted(os.listdir('books'), key=lambda x: os.path.getctime(os.path.join('books', x)), reverse=True)
+    books = sorted(os.listdir(UPLOAD_DIR), key=lambda x: os.path.getctime(os.path.join(UPLOAD_DIR, x)), reverse=True)
     if not books:
         return jsonify({'error': 'No book uploaded'}), 400
-    book_path = os.path.join('books', books[0])
-    # Читаем ключи
-    with open('book_analyzer_keys.json', 'r', encoding='utf-8') as f:
-        keys = json.load(f)
+    book_path = os.path.join(UPLOAD_DIR, books[0])
     from tasks import analyze_book_task
-    analyze_book_task.delay(book_path, prompt, keys['gpt_api_key'])
+    analyze_book_task.delay(book_path, prompt, config['gpt_api_key'])
     return jsonify({'status': 'started'})
 
 @app.route('/api/book_analyzer/generate_post', methods=['POST'])
