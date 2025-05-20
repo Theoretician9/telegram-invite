@@ -69,6 +69,7 @@
         </div>
         <button type="submit" class="btn btn-success">Запустить анализ книги</button>
       </form>
+      <div id="analyze-status" class="alert alert-info mt-3" style="display:none;"></div>
       <hr>
       <form id="generate-form" method="post" action="/api/book_analyzer/generate_post">
         <button type="submit" class="btn btn-info">Сгенерировать пост</button>
@@ -144,6 +145,7 @@ document.getElementById('analyze-form').onsubmit = async function(e) {
     const resp = await fetch('/api/book_analyzer/analyze_book', {method: 'POST', body: formData});
     const data = await resp.json();
     alert(data.status === 'started' ? 'Анализ запущен!' : data.error);
+    pollAnalyzeStatus();
 };
 
 document.getElementById('generate-form').onsubmit = async function(e) {
@@ -191,5 +193,38 @@ async function loadPrompts() {
     }
 }
 loadPrompts();
+
+// Индикатор статуса анализа
+async function pollAnalyzeStatus() {
+    const statusDiv = document.getElementById('analyze-status');
+    try {
+        const resp = await fetch('/api/book_analyzer/analyze_status');
+        const data = await resp.json();
+        if (data.status === 'started' || data.status === 'in_progress') {
+            statusDiv.style.display = '';
+            statusDiv.className = 'alert alert-info mt-3';
+            let progress = data.progress && data.total ? ` (${data.progress}/${data.total})` : '';
+            statusDiv.innerHTML = 'Анализ книги выполняется' + progress + '...';
+            setTimeout(pollAnalyzeStatus, 2000);
+        } else if (data.status === 'done') {
+            statusDiv.style.display = '';
+            statusDiv.className = 'alert alert-success mt-3';
+            statusDiv.innerHTML = 'Анализ завершён! <a href="' + (data.result_path ? '/download?file=' + encodeURIComponent(data.result_path) : '#') + '" target="_blank">Скачать результат</a>';
+        } else if (data.status === 'error') {
+            statusDiv.style.display = '';
+            statusDiv.className = 'alert alert-danger mt-3';
+            statusDiv.innerHTML = 'Ошибка анализа: ' + (data.error || 'Неизвестная ошибка');
+        } else {
+            statusDiv.style.display = 'none';
+        }
+    } catch (e) {
+        statusDiv.style.display = '';
+        statusDiv.className = 'alert alert-danger mt-3';
+        statusDiv.innerHTML = 'Ошибка получения статуса анализа';
+    }
+}
+
+// Автостарт статуса при загрузке страницы
+pollAnalyzeStatus();
 </script>
 {% endblock %} 

@@ -717,6 +717,13 @@ async def analyze_status():
     result = {k.decode(): v.decode() for k, v in status.items()}
     return jsonify(result)
 
+@app.route('/download')
+async def download_analysis():
+    file = request.args.get('file')
+    if not file or not os.path.exists(file):
+        return 'Файл не найден', 404
+    return await send_file(file, as_attachment=True)
+
 @app.errorhandler(413)
 async def too_large(e):
     return jsonify({'status': 'error', 'error': 'Файл слишком большой!'}), 413
