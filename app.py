@@ -549,16 +549,28 @@ async def bulk_invite_status():
 async def book_analyzer_page():
     return await render_template('book_analyzer.html')
 
+# Создаем директорию для загруженных книг
+UPLOAD_DIR = os.path.join(os.path.dirname(__file__), 'uploads')
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 @app.route('/api/book_analyzer/upload_book', methods=['POST'])
-async def upload_book():
-    files = await request.files
-    if 'book_file' not in files:
-        return jsonify({'error': 'No file provided'}), 400
-    file = files['book_file']
+def upload_book():
+    if 'book' not in request.files:
+        return jsonify({'status': 'error', 'error': 'Файл не найден'})
+    
+    file = request.files['book']
+    if file.filename == '':
+        return jsonify({'status': 'error', 'error': 'Файл не выбран'})
+    
+    # Проверяем расширение файла
+    if not file.filename.lower().endswith(('.txt', '.pdf')):
+        return jsonify({'status': 'error', 'error': 'Поддерживаются только .txt и .pdf файлы'})
+    
+    # Сохраняем файл
     filename = secure_filename(file.filename)
-    os.makedirs('books', exist_ok=True)
-    path = os.path.join('books', filename)
-    await file.save(path)
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    file.save(file_path)
+    
     return jsonify({'status': 'ok', 'filename': filename})
 
 @app.route('/api/book_analyzer/save_keys', methods=['POST'])

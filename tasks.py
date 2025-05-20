@@ -12,6 +12,8 @@ from models import GeneratedPost, Base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 import openai
+import PyPDF2
+import re
 
 from celery_app import app
 from telethon.sync import TelegramClient
@@ -42,6 +44,10 @@ redis_client = redis.Redis.from_url(REDIS_URL)
 DB_URL = os.getenv('DB_URL') or 'mysql+pymysql://telegraminvi:QyA9fWbh56Ln@127.0.0.1/telegraminvi'
 engine = create_engine(DB_URL)
 SessionLocal = sessionmaker(bind=engine)
+
+# Создаем директорию для анализов, если её нет
+ANALYSES_DIR = os.getenv('ANALYSES_DIR', os.path.join(os.path.dirname(__file__), 'analyses'))
+os.makedirs(ANALYSES_DIR, exist_ok=True)
 
 
 def get_db_conn():
@@ -273,25 +279,92 @@ def bulk_invite_task(self, channel_username, file_path):
         raise
 
 
-@app.task
-def analyze_book_task(book_path, prompt, gpt_api_key):
-    # Читает книгу, отправляет в GPT, сохраняет summary/идеи в файл
-    with open(book_path, 'r', encoding='utf-8') as f:
-        book_text = f.read()
+def extract_text_from_pdf(pdf_path):
+    """Извлекает текст из PDF файла."""
+    text = ""
+    with open(pdf_path, 'rb') as file:
+        pdf_reader = PyPDF2.PdfReader(file)
+        for page in pdf_reader.pages:
+            text += page.extract_text() + "\n"
+    return text
+
+def split_text_into_chunks(text, chunk_size=8000):
+    """Разбивает текст на части по предложениям."""
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    chunks = []
+    current_chunk = ""
+    
+    for sentence in sentences:
+        if len(current_chunk) + len(sentence) < chunk_size:
+            current_chunk += sentence + " "
+        else:
+            chunks.append(current_chunk.strip())
+            current_chunk = sentence + " "
+    
+    if current_chunk:
+        chunks.append(current_chunk.strip())
+    
+    return chunks
+
+def analyze_chunk(chunk, gpt_api_key):
+    """Анализирует часть текста через GPT."""
     openai.api_key = gpt_api_key
-    # Для больших книг — разбивать на части, здесь только первые 10000 символов
     response = openai.ChatCompletion.create(
         model="gpt-4",
         messages=[
-            {"role": "system", "content": "Ты литературный редактор. Проанализируй книгу и выдели основные смыслы, главы, идеи, сюжетные линии, персонажей, факты, цитаты. Подготовь материал для генерации 100+ уникальных постов."},
-            {"role": "user", "content": f"{prompt}\n\n{book_text[:10000]}"}
+            {"role": "system", "content": """Ты литературный редактор. Проанализируй текст и выдели:
+1. Основные темы и идеи
+2. Ключевые моменты
+3. Важные цитаты
+4. Персонажи (если есть)
+5. Сюжетные линии (если есть)
+Формат ответа - JSON."""},
+            {"role": "user", "content": chunk}
         ]
     )
-    summary = response['choices'][0]['message']['content']
-    analysis_path = book_path + '.analysis.txt'
+    return response['choices'][0]['message']['content']
+
+@app.task
+def analyze_book_task(book_path, prompt, gpt_api_key):
+    """Анализирует книгу и сохраняет результаты."""
+    # Определяем формат файла и читаем текст
+    if book_path.lower().endswith('.pdf'):
+        text = extract_text_from_pdf(book_path)
+    else:
+        with open(book_path, 'r', encoding='utf-8') as f:
+            text = f.read()
+    
+    # Разбиваем текст на части
+    chunks = split_text_into_chunks(text)
+    
+    # Анализируем каждую часть
+    analyses = []
+    for i, chunk in enumerate(chunks):
+        analysis = analyze_chunk(chunk, gpt_api_key)
+        try:
+            # Пытаемся распарсить JSON
+            analysis_json = json.loads(analysis)
+            analyses.append(analysis_json)
+        except json.JSONDecodeError:
+            # Если не получилось - сохраняем как есть
+            analyses.append({"raw_analysis": analysis})
+    
+    # Объединяем результаты анализа
+    combined_analysis = {
+        "book_name": os.path.basename(book_path),
+        "analysis_date": datetime.now().isoformat(),
+        "total_chunks": len(chunks),
+        "analyses": analyses
+    }
+    
+    # Сохраняем результат
+    analysis_filename = os.path.basename(book_path) + '.analysis.json'
+    analysis_path = os.path.join(ANALYSES_DIR, analysis_filename)
+    
     with open(analysis_path, 'w', encoding='utf-8') as f:
-        f.write(summary)
-    return summary
+        json.dump(combined_analysis, f, ensure_ascii=False, indent=2)
+    
+    return analysis_path
 
 
 @app.task
@@ -312,7 +385,7 @@ def generate_post_task(analysis_path, prompt, gpt_api_key):
     db = SessionLocal()
     try:
         new_post = GeneratedPost(
-            book_filename=os.path.basename(analysis_path).replace('.analysis.txt',''),
+            book_filename=os.path.basename(analysis_path).replace('.analysis.json',''),
             prompt=prompt,
             content=post,
             published=False,
