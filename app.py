@@ -556,31 +556,47 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 @app.route('/api/book_analyzer/upload_book', methods=['POST'])
 async def upload_book():
     try:
+        logging.info("Starting file upload process")
         files = await request.files
+        logging.info(f"Received files: {files}")
+        
         if 'book' not in files:
-            logging.error("No file in request")
-            return jsonify({'status': 'error', 'error': 'Файл не найден'})
+            logging.error("No 'book' file in request")
+            return jsonify({'status': 'error', 'error': 'Файл не найден'}), 400
         
         file = files['book']
+        logging.info(f"File info: filename={file.filename}, content_type={file.content_type}")
+        
         if file.filename == '':
             logging.error("Empty filename")
-            return jsonify({'status': 'error', 'error': 'Файл не выбран'})
+            return jsonify({'status': 'error', 'error': 'Файл не выбран'}), 400
         
         # Проверяем расширение файла
         if not file.filename.lower().endswith(('.txt', '.pdf')):
             logging.error(f"Invalid file type: {file.filename}")
-            return jsonify({'status': 'error', 'error': 'Поддерживаются только .txt и .pdf файлы'})
+            return jsonify({'status': 'error', 'error': 'Поддерживаются только .txt и .pdf файлы'}), 400
+        
+        # Создаем директорию, если её нет
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
         
         # Сохраняем файл
         filename = secure_filename(file.filename)
         file_path = os.path.join(UPLOAD_DIR, filename)
+        logging.info(f"Saving file to: {file_path}")
+        
         await file.save(file_path)
+        
+        # Проверяем, что файл действительно сохранился
+        if not os.path.exists(file_path):
+            logging.error(f"File was not saved: {file_path}")
+            return jsonify({'status': 'error', 'error': 'Ошибка при сохранении файла'}), 500
         
         logging.info(f"File saved successfully: {file_path}")
         return jsonify({'status': 'ok', 'filename': filename})
+        
     except Exception as e:
-        logging.error(f"Error uploading file: {str(e)}")
-        return jsonify({'status': 'error', 'error': f'Ошибка при загрузке: {str(e)}'})
+        logging.error(f"Error uploading file: {str(e)}", exc_info=True)
+        return jsonify({'status': 'error', 'error': f'Ошибка при загрузке: {str(e)}'}), 500
 
 @app.route('/api/book_analyzer/save_keys', methods=['POST'])
 async def save_keys():

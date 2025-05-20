@@ -4,12 +4,17 @@
   <h2 class="mb-4">Анализ книги и автопостинг</h2>
   <div class="card shadow-lg mb-4">
     <div class="card-body">
-      <form id="book-form" enctype="multipart/form-data" method="post" action="/api/book_analyzer/upload_book">
+      <form id="book-form" enctype="multipart/form-data">
         <div class="mb-3">
-          <label for="book" class="form-label">Загрузите книгу (txt, docx, pdf)</label>
+          <label for="book" class="form-label">Загрузите книгу (txt, pdf)</label>
           <input type="file" class="form-control" id="book" name="book" accept=".txt,.pdf" required>
         </div>
         <button type="submit" class="btn btn-primary">Загрузить книгу</button>
+        <div id="upload-status" class="mt-2" style="display: none;">
+          <div class="progress">
+            <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+          </div>
+        </div>
       </form>
       <hr>
       <form id="keys-form" method="post" action="/api/book_analyzer/save_keys">
@@ -91,9 +96,38 @@
 document.getElementById('book-form').onsubmit = async function(e) {
     e.preventDefault();
     const formData = new FormData(this);
-    const resp = await fetch('/api/book_analyzer/upload_book', {method: 'POST', body: formData});
-    const data = await resp.json();
-    alert(data.status === 'ok' ? 'Книга загружена!' : data.error);
+    const statusDiv = document.getElementById('upload-status');
+    const progressBar = statusDiv.querySelector('.progress-bar');
+    
+    try {
+        statusDiv.style.display = 'block';
+        progressBar.style.width = '0%';
+        
+        const resp = await fetch('/api/book_analyzer/upload_book', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await resp.json();
+        if (data.status === 'ok') {
+            progressBar.style.width = '100%';
+            progressBar.classList.add('bg-success');
+            alert('Книга успешно загружена!');
+            this.reset();
+        } else {
+            progressBar.classList.add('bg-danger');
+            alert('Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        progressBar.classList.add('bg-danger');
+        alert('Ошибка при загрузке файла: ' + error.message);
+    } finally {
+        setTimeout(() => {
+            statusDiv.style.display = 'none';
+            progressBar.classList.remove('bg-success', 'bg-danger');
+        }, 3000);
+    }
 };
 
 document.getElementById('keys-form').onsubmit = async function(e) {
