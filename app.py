@@ -554,24 +554,33 @@ UPLOAD_DIR = os.path.join(os.path.dirname(__file__), 'uploads')
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @app.route('/api/book_analyzer/upload_book', methods=['POST'])
-def upload_book():
-    if 'book' not in request.files:
-        return jsonify({'status': 'error', 'error': 'Файл не найден'})
-    
-    file = request.files['book']
-    if file.filename == '':
-        return jsonify({'status': 'error', 'error': 'Файл не выбран'})
-    
-    # Проверяем расширение файла
-    if not file.filename.lower().endswith(('.txt', '.pdf')):
-        return jsonify({'status': 'error', 'error': 'Поддерживаются только .txt и .pdf файлы'})
-    
-    # Сохраняем файл
-    filename = secure_filename(file.filename)
-    file_path = os.path.join(UPLOAD_DIR, filename)
-    file.save(file_path)
-    
-    return jsonify({'status': 'ok', 'filename': filename})
+async def upload_book():
+    try:
+        files = await request.files
+        if 'book' not in files:
+            logging.error("No file in request")
+            return jsonify({'status': 'error', 'error': 'Файл не найден'})
+        
+        file = files['book']
+        if file.filename == '':
+            logging.error("Empty filename")
+            return jsonify({'status': 'error', 'error': 'Файл не выбран'})
+        
+        # Проверяем расширение файла
+        if not file.filename.lower().endswith(('.txt', '.pdf')):
+            logging.error(f"Invalid file type: {file.filename}")
+            return jsonify({'status': 'error', 'error': 'Поддерживаются только .txt и .pdf файлы'})
+        
+        # Сохраняем файл
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(UPLOAD_DIR, filename)
+        await file.save(file_path)
+        
+        logging.info(f"File saved successfully: {file_path}")
+        return jsonify({'status': 'ok', 'filename': filename})
+    except Exception as e:
+        logging.error(f"Error uploading file: {str(e)}")
+        return jsonify({'status': 'error', 'error': f'Ошибка при загрузке: {str(e)}'})
 
 @app.route('/api/book_analyzer/save_keys', methods=['POST'])
 async def save_keys():
