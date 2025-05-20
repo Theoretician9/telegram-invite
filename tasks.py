@@ -306,27 +306,28 @@ def split_text_into_chunks(text, chunk_size=8000):
     
     return chunks
 
-def analyze_chunk(chunk, gpt_api_key):
+def analyze_chunk(chunk, gpt_api_key, analysis_prompt):
     """Анализирует часть текста через GPT."""
     openai.api_key = gpt_api_key
     response = openai.ChatCompletion.create(
         model="gpt-4",
         messages=[
-            {"role": "system", "content": """Ты литературный редактор. Проанализируй текст и выдели:
-1. Основные темы и идеи
-2. Ключевые моменты
-3. Важные цитаты
-4. Персонажи (если есть)
-5. Сюжетные линии (если есть)
-Формат ответа - JSON."""},
+            {"role": "system", "content": analysis_prompt},
             {"role": "user", "content": chunk}
         ]
     )
     return response['choices'][0]['message']['content']
 
 @app.task
-def analyze_book_task(book_path, prompt, gpt_api_key):
+def analyze_book_task(book_path, additional_prompt, gpt_api_key):
     """Анализирует книгу и сохраняет результаты."""
+    # Читаем конфиг с промптами
+    with open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
+        config = json.load(f)
+    analysis_prompt = config['analysis_prompt']
+    if additional_prompt:
+        analysis_prompt += f"\n\nДополнительное задание: {additional_prompt}"
+    
     # Определяем формат файла и читаем текст
     if book_path.lower().endswith('.pdf'):
         text = extract_text_from_pdf(book_path)
@@ -340,7 +341,7 @@ def analyze_book_task(book_path, prompt, gpt_api_key):
     # Анализируем каждую часть
     analyses = []
     for i, chunk in enumerate(chunks):
-        analysis = analyze_chunk(chunk, gpt_api_key)
+        analysis = analyze_chunk(chunk, gpt_api_key, analysis_prompt)
         try:
             # Пытаемся распарсить JSON
             analysis_json = json.loads(analysis)
@@ -369,33 +370,20 @@ def analyze_book_task(book_path, prompt, gpt_api_key):
 
 @app.task
 def generate_post_task(analysis_path, prompt, gpt_api_key):
-    # Генерирует пост по анализу и промпту, сохраняет в БД
+    # Читаем конфиг с промптами
+    with open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
+        config = json.load(f)
+    post_prompt = config['post_prompt']
+    if prompt:
+        post_prompt += f"\n\nДополнительное задание: {prompt}"
+    
     with open(analysis_path, 'r', encoding='utf-8') as f:
         analysis = f.read()
     openai.api_key = gpt_api_key
     response = openai.ChatCompletion.create(
         model="gpt-4",
         messages=[
-            {"role": "system", "content": """Ты создаёшь посты для Telegram-канала. Правила:
-1. Длина поста: 200-400 слов
-2. Структура:
-   - Захватывающий заголовок
-   - 2-3 абзаца основного текста
-   - Заключение или призыв к действию
-3. Стиль:
-   - Живой, разговорный язык
-   - Короткие предложения
-   - Эмодзи для выделения ключевых моментов
-   - Хештеги в конце (3-5 штук)
-4. Форматирование:
-   - Абзацы разделены пустыми строками
-   - Важные мысли выделены *жирным*
-   - Цитаты в кавычках
-5. Содержание:
-   - Интересные факты из книги
-   - Практические выводы
-   - Связь с современностью
-   - Личный взгляд на материал"""},
+            {"role": "system", "content": post_prompt},
             {"role": "user", "content": f"Создай пост на тему: {prompt}\n\nИспользуй этот анализ книги:\n{analysis}"}
         ]
     )
