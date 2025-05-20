@@ -37,4 +37,14 @@ class InviteLog(Base):
     status = Column(String(32))
     reason = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
-    account = relationship('Account', back_populates='invite_logs') 
+    account = relationship('Account', back_populates='invite_logs')
+
+class GeneratedPost(Base):
+    __tablename__ = 'generated_posts'
+    id = Column(Integer, primary_key=True)
+    book_filename = Column(String(255))
+    prompt = Column(Text)
+    content = Column(Text)
+    published = Column(Boolean, default=False)
+    published_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow) 
