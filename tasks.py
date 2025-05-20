@@ -288,29 +288,25 @@ def extract_text_from_pdf(pdf_path):
             text += page.extract_text() + "\n"
     return text
 
-def split_text_into_chunks(text, chunk_size=8000):
+def split_text_into_chunks(text, chunk_size):
     """Разбивает текст на части по предложениям."""
     sentences = re.split(r'(?<=[.!?])\s+', text)
     chunks = []
     current_chunk = ""
-    
     for sentence in sentences:
         if len(current_chunk) + len(sentence) < chunk_size:
             current_chunk += sentence + " "
         else:
             chunks.append(current_chunk.strip())
             current_chunk = sentence + " "
-    
     if current_chunk:
         chunks.append(current_chunk.strip())
-    
     return chunks
 
-def analyze_chunk(chunk, gpt_api_key, analysis_prompt):
-    """Анализирует часть текста через GPT (openai>=1.0.0)."""
+def analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model):
     client = openai.OpenAI(api_key=gpt_api_key)
     response = client.chat.completions.create(
-        model="gpt-4",
+        model=gpt_model,
         messages=[
             {"role": "system", "content": analysis_prompt},
             {"role": "user", "content": chunk}
@@ -319,35 +315,38 @@ def analyze_chunk(chunk, gpt_api_key, analysis_prompt):
     return response.choices[0].message.content
 
 @app.task
-def analyze_book_task(book_path, additional_prompt, gpt_api_key):
-    """Анализирует книгу и сохраняет результаты."""
-    # Читаем конфиг с промптами
+def analyze_book_task(book_path, additional_prompt, gpt_api_key, gpt_model='gpt-3.5-turbo'):
     with open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
     analysis_prompt = config['analysis_prompt']
     if additional_prompt:
         analysis_prompt += f"\n\nДополнительное задание: {additional_prompt}"
-    # Определяем формат файла и читаем текст
     if book_path.lower().endswith('.pdf'):
         text = extract_text_from_pdf(book_path)
     else:
         with open(book_path, 'r', encoding='utf-8') as f:
             text = f.read()
-    # Разбиваем текст на части
-    chunks = split_text_into_chunks(text)
-    # --- Сохраняем статус started ---
+    # Определяем chunk_size по модели
+    if gpt_model == 'gpt-3.5-turbo':
+        chunk_size = 40000
+    elif gpt_model == 'gpt-4':
+        chunk_size = 20000
+    elif gpt_model == 'gpt-4o':
+        chunk_size = 320000
+    else:
+        chunk_size = 8000
+    chunks = split_text_into_chunks(text, chunk_size)
     status_key = f"analyze_status:{os.path.basename(book_path)}"
     redis_client.hmset(status_key, {"status": "started", "progress": 0, "total": len(chunks)})
     try:
         analyses = []
         for i, chunk in enumerate(chunks):
-            analysis = analyze_chunk(chunk, gpt_api_key, analysis_prompt)
+            analysis = analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model)
             try:
                 analysis_json = json.loads(analysis)
                 analyses.append(analysis_json)
             except json.JSONDecodeError:
                 analyses.append({"raw_analysis": analysis})
-            # --- Обновляем прогресс ---
             redis_client.hmset(status_key, {"status": "in_progress", "progress": i+1, "total": len(chunks)})
         combined_analysis = {
             "book_name": os.path.basename(book_path),
@@ -359,7 +358,6 @@ def analyze_book_task(book_path, additional_prompt, gpt_api_key):
         analysis_path = os.path.join(ANALYSES_DIR, analysis_filename)
         with open(analysis_path, 'w', encoding='utf-8') as f:
             json.dump(combined_analysis, f, ensure_ascii=False, indent=2)
-        # --- Статус done ---
         redis_client.hmset(status_key, {"status": "done", "progress": len(chunks), "total": len(chunks), "result_path": analysis_path})
         return analysis_path
     except Exception as e:
