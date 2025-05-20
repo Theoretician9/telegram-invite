@@ -315,7 +315,7 @@ def analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model):
     return response.choices[0].message.content
 
 @app.task
-def analyze_book_task(book_path, additional_prompt, gpt_api_key, gpt_model='gpt-3.5-turbo'):
+def analyze_book_task(book_path, additional_prompt, gpt_api_key, gpt_model='gpt-3.5-turbo-1106'):
     with open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
     analysis_prompt = config['analysis_prompt']
@@ -326,12 +326,12 @@ def analyze_book_task(book_path, additional_prompt, gpt_api_key, gpt_model='gpt-
     else:
         with open(book_path, 'r', encoding='utf-8') as f:
             text = f.read()
-    # Определяем chunk_size по модели
-    if gpt_model == 'gpt-3.5-turbo':
+    # chunk_size по модели
+    if gpt_model == 'gpt-3.5-turbo-1106':
         chunk_size = 40000
-    elif gpt_model == 'gpt-4':
-        chunk_size = 20000
     elif gpt_model == 'gpt-4o':
+        chunk_size = 320000
+    elif gpt_model == 'gpt-4.1-nano':
         chunk_size = 320000
     else:
         chunk_size = 8000
