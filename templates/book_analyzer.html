@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4">
+  <h2 class="mb-4">Анализ книги и автопостинг</h2>
+  <div class="card shadow-lg mb-4">
+    <div class="card-body">
+      <form id="book-form" enctype="multipart/form-data" method="post" action="/api/book_analyzer/upload_book">
+        <div class="mb-3">
+          <label for="book_file" class="form-label">Загрузите книгу (txt, docx, pdf)</label>
+          <input type="file" class="form-control" id="book_file" name="book_file" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Загрузить книгу</button>
+      </form>
+      <hr>
+      <form id="keys-form" method="post" action="/api/book_analyzer/save_keys">
+        <div class="mb-3">
+          <label for="gpt_api_key" class="form-label">GPT API Key</label>
+          <input type="text" class="form-control" id="gpt_api_key" name="gpt_api_key" required>
+        </div>
+        <div class="mb-3">
+          <label for="telegram_bot_token" class="form-label">Telegram Bot Token</label>
+          <input type="text" class="form-control" id="telegram_bot_token" name="telegram_bot_token" required>
+        </div>
+        <button type="submit" class="btn btn-secondary">Сохранить</button>
+      </form>
+      <hr>
+      <form id="analyze-form" method="post" action="/api/book_analyzer/analyze_book">
+        <div class="mb-3">
+          <label for="prompt" class="form-label">Промпт для анализа</label>
+          <input type="text" class="form-control" id="prompt" name="prompt" required>
+        </div>
+        <button type="submit" class="btn btn-success">Запустить анализ книги</button>
+      </form>
+      <hr>
+      <form id="generate-form" method="post" action="/api/book_analyzer/generate_post">
+        <button type="submit" class="btn btn-info">Сгенерировать пост</button>
+      </form>
+      <hr>
+      <form id="autopost-form" method="post" action="/api/book_analyzer/start_autopost">
+        <div class="mb-3">
+          <label for="schedule" class="form-label">Время публикаций (через запятую, HH:MM, по Москве)</label>
+          <input type="text" class="form-control" id="schedule" name="schedule" placeholder="09:00,13:00,18:00">
+        </div>
+        <button type="submit" class="btn btn-warning">Запустить автопостинг</button>
+      </form>
+    </div>
+  </div>
+  <div class="card mt-4">
+    <div class="card-header">Лог сгенерированных постов</div>
+    <div class="card-body">
+      <div id="posts-log">
+        <!-- Здесь будет лог постов -->
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+// TODO: JS для отправки форм и обновления лога постов
+</script>
+{% endblock %} 

@@ -14,12 +14,13 @@ from functools import wraps
 import csv
 from io import StringIO
 from qr_login import generate_qr_login, poll_qr_login
-from models import Account, AccountChannelLimit, Base, InviteLog
+from models import Account, AccountChannelLimit, Base, InviteLog, GeneratedPost
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from quart import Quart, request, jsonify, render_template, redirect, url_for, flash, send_file, session
 from quart_session import Session
 import redis.asyncio as aioredis
+from werkzeug.utils import secure_filename
 
 # --- Configuration & Logging ---
 BASE_DIR = os.path.dirname(__file__)
@@ -543,6 +544,94 @@ async def bulk_invite_status():
         total = int(status.get(b'total', b'0'))
         return jsonify({'progress': progress, 'total': total})
     return jsonify({'progress': 0, 'total': 0})
+
+@app.route('/book_analyzer', methods=['GET'])
+async def book_analyzer_page():
+    return await render_template('book_analyzer.html')
+
+@app.route('/api/book_analyzer/upload_book', methods=['POST'])
+async def upload_book():
+    files = await request.files
+    if 'book_file' not in files:
+        return jsonify({'error': 'No file provided'}), 400
+    file = files['book_file']
+    filename = secure_filename(file.filename)
+    os.makedirs('books', exist_ok=True)
+    path = os.path.join('books', filename)
+    await file.save(path)
+    return jsonify({'status': 'ok', 'filename': filename})
+
+@app.route('/api/book_analyzer/save_keys', methods=['POST'])
+async def save_keys():
+    form = await request.form
+    gpt_api_key = form.get('gpt_api_key')
+    telegram_bot_token = form.get('telegram_bot_token')
+    # Сохраняем ключи в отдельный файл (или БД)
+    with open('book_analyzer_keys.json', 'w', encoding='utf-8') as f:
+        json.dump({'gpt_api_key': gpt_api_key, 'telegram_bot_token': telegram_bot_token}, f)
+    return jsonify({'status': 'ok'})
+
+@app.route('/api/book_analyzer/analyze_book', methods=['POST'])
+async def analyze_book():
+    form = await request.form
+    prompt = form.get('prompt')
+    # Для простоты берём последнюю загруженную книгу
+    books = sorted(os.listdir('books'), key=lambda x: os.path.getctime(os.path.join('books', x)), reverse=True)
+    if not books:
+        return jsonify({'error': 'No book uploaded'}), 400
+    book_path = os.path.join('books', books[0])
+    # Читаем ключи
+    with open('book_analyzer_keys.json', 'r', encoding='utf-8') as f:
+        keys = json.load(f)
+    from tasks import analyze_book_task
+    analyze_book_task.delay(book_path, prompt, keys['gpt_api_key'])
+    return jsonify({'status': 'started'})
+
+@app.route('/api/book_analyzer/generate_post', methods=['POST'])
+async def generate_post():
+    # Для простоты берём последнюю проанализированную книгу
+    books = sorted(os.listdir('books'), key=lambda x: os.path.getctime(os.path.join('books', x)), reverse=True)
+    if not books:
+        return jsonify({'error': 'No book uploaded'}), 400
+    book_path = os.path.join('books', books[0])
+    analysis_path = book_path + '.analysis.txt'
+    if not os.path.exists(analysis_path):
+        return jsonify({'error': 'Book not analyzed yet'}), 400
+    with open('book_analyzer_keys.json', 'r', encoding='utf-8') as f:
+        keys = json.load(f)
+    prompt = (await request.form).get('prompt', 'Сделай пост по материалу книги')
+    from tasks import generate_post_task
+    generate_post_task.delay(analysis_path, prompt, keys['gpt_api_key'])
+    return jsonify({'status': 'started'})
+
+@app.route('/api/book_analyzer/start_autopost', methods=['POST'])
+async def start_autopost():
+    form = await request.form
+    schedule = form.get('schedule')
+    with open('book_analyzer_keys.json', 'r', encoding='utf-8') as f:
+        keys = json.load(f)
+    from tasks import autopost_task
+    autopost_task.delay(schedule, keys['telegram_bot_token'])
+    return jsonify({'status': 'started'})
+
+@app.route('/api/book_analyzer/posts_log', methods=['GET'])
+async def posts_log():
+    db = SessionLocal()
+    try:
+        posts = db.query(GeneratedPost).order_by(GeneratedPost.created_at.desc()).limit(100).all()
+        return jsonify([
+            {
+                'id': p.id,
+                'book_filename': p.book_filename,
+                'prompt': p.prompt,
+                'content': p.content,
+                'published': p.published,
+                'published_at': p.published_at.isoformat() if p.published_at else None,
+                'created_at': p.created_at.isoformat() if p.created_at else None
+            } for p in posts
+        ])
+    finally:
+        db.close()
 
 if __name__ == '__main__':
     import hypercorn.asyncio
