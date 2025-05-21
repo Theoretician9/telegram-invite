@@ -384,40 +384,29 @@ sudo systemctl reload nginx
 
 --- 
 
-# Май 2025: Поддержка Together.ai и DeepSeek 67B
+# Май 2025: Обновление поддержки Together.ai моделей
 
-## Новые возможности
-- Добавлена поддержка моделей Together.ai, в частности DeepSeek 67B (deepseek-67b-chat).
-- Теперь можно использовать отдельный Together.ai API key для работы с этими моделями.
-- В интерфейсе появился выбор модели DeepSeek 67B и отдельное поле для Together.ai API key.
+## Убрана поддержка
+- Falcon 180B (togethercomputer/falcon-180b-chat) больше не поддерживается, так как модель недоступна через Together.ai API.
 
-## Изменения в коде
-- В функцию `analyze_chunk` добавлена ветка для deepseek-67b: если выбрана эта модель, запрос отправляется через Together.ai API (`https://api.together.xyz/v1/chat/completions`).
-- В Celery-задачах `analyze_book_task` и `generate_post_task` теперь поддерживается параметр `together_api_key` и корректная маршрутизация вызова (OpenAI или Together).
-- chunk_size для DeepSeek 67B установлен 32000 символов.
-- Для других моделей логика не изменилась.
+## Добавлены новые модели
+- **DeepSeek V3-0324** (`deepseek-ai/deepseek-v3-0324`)
+- **Llama 4 Maverick Instruct (17Bx128E)** (`meta-llama/Llama-4-Maverick-70B-Instruct`)
+- **Meta Llama 3.3 70B Instruct Turbo Free** (`meta-llama/Meta-Llama-3.3-70B-Instruct-Turbo`)
 
-## Как использовать
-- Введите Together.ai API key в соответствующее поле.
-- Выберите модель DeepSeek 67B в выпадающем списке.
-- Для анализа и генерации постов будет использоваться Together.ai API.
+### Как использовать
+- В интерфейсе book_analyzer можно выбрать любую из этих моделей в выпадающем списке.
+- Для работы требуется актуальный Together.ai API key.
+- chunk_size для этих моделей установлен 32 000 символов.
+- Все запросы отправляются через Together.ai API (`https://api.together.xyz/v1/chat/completions`).
 
-## Пример запроса к Together.ai
-```
-POST https://api.together.xyz/v1/chat/completions
-Authorization: Bearer <together_api_key>
-{
-  "model": "deepseek-67b-chat",
-  "messages": [
-    {"role": "system", "content": "..."},
-    {"role": "user", "content": "..."}
-  ]
-}
-```
+### Преимущества
+- Поддержка больших текстов (32k+ символов).
+- Бесплатные или дешевые тарифы (уточнять на together.ai).
+- Современные модели с хорошим качеством генерации.
 
-## Важно
-- Для работы DeepSeek 67B обязателен Together.ai API key.
-- Для OpenAI моделей (gpt-3.5, gpt-4o и др.) используется обычный OpenAI API key.
-- Все параметры (ключи, модель) сохраняются в book_analyzer_config.json и автоматически подставляются в задачи анализа и генерации постов.
+### Ограничения
+- Для каждой модели могут быть свои лимиты по скорости и количеству запросов (см. together.ai).
+- Если модель недоступна или возникает ошибка, подробная информация выводится в логах и stdout Celery.
 
 --- 
