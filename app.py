@@ -603,16 +603,17 @@ async def upload_book():
 async def save_keys():
     form = await request.form
     gpt_api_key = form.get('gpt_api_key')
-    gpt_model = form.get('gpt_model', 'gpt-3.5-turbo')
+    gpt_model = form.get('gpt_model', 'gpt-3.5-turbo-1106')
     telegram_bot_token = form.get('telegram_bot_token')
+    chat_id = form.get('chat_id')
     analysis_prompt = form.get('analysis_prompt')
     post_prompt = form.get('post_prompt')
-    # Сохраняем ключи, модель и промпты в файл
     with open('book_analyzer_config.json', 'w', encoding='utf-8') as f:
         json.dump({
             'gpt_api_key': gpt_api_key,
             'gpt_model': gpt_model,
             'telegram_bot_token': telegram_bot_token,
+            'chat_id': chat_id,
             'analysis_prompt': analysis_prompt,
             'post_prompt': post_prompt
         }, f, ensure_ascii=False, indent=2)
@@ -627,14 +628,16 @@ async def get_prompts():
             'status': 'ok',
             'analysis_prompt': config.get('analysis_prompt', ''),
             'post_prompt': config.get('post_prompt', ''),
-            'gpt_model': config.get('gpt_model', 'gpt-3.5-turbo')
+            'gpt_model': config.get('gpt_model', 'gpt-3.5-turbo-1106'),
+            'chat_id': config.get('chat_id', '')
         })
     except FileNotFoundError:
         return jsonify({
             'status': 'ok',
             'analysis_prompt': '',
             'post_prompt': '',
-            'gpt_model': 'gpt-3.5-turbo'
+            'gpt_model': 'gpt-3.5-turbo-1106',
+            'chat_id': ''
         })
 
 @app.route('/api/book_analyzer/analyze_book', methods=['POST'])
@@ -729,6 +732,27 @@ async def download_analysis():
 @app.errorhandler(413)
 async def too_large(e):
     return jsonify({'status': 'error', 'error': 'Файл слишком большой!'}), 413
+
+@app.route('/api/book_analyzer/publish_post', methods=['POST'])
+async def publish_post():
+    data = await request.get_json()
+    post_id = data.get('post_id')
+    if not post_id:
+        return jsonify({'error': 'No post_id provided'}), 400
+    db = SessionLocal()
+    try:
+        post = db.query(GeneratedPost).filter_by(id=post_id).first()
+        if not post:
+            return jsonify({'error': 'Post not found'}), 404
+        if post.published:
+            return jsonify({'error': 'Already published'}), 400
+        with open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        from tasks import publish_post_task
+        publish_post_task.delay(post_id, config['telegram_bot_token'], config.get('chat_id'))
+        return jsonify({'status': 'ok'})
+    finally:
+        db.close()
 
 if __name__ == '__main__':
     import hypercorn.asyncio

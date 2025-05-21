@@ -26,6 +26,7 @@ from telethon.tl.functions.contacts import ImportContactsRequest, DeleteContacts
 from telethon.tl.functions.channels import InviteToChannelRequest
 from telethon.tl.functions.messages import ExportChatInviteRequest
 from telethon.tl.types import InputPhoneContact
+from telegram import Bot
 
 # Настройка логгера
 logger = logging.getLogger(__name__)
@@ -402,22 +403,40 @@ def generate_post_task(analysis_path, prompt, gpt_api_key):
 
 
 @app.task
-def autopost_task(schedule, telegram_bot_token):
-    # schedule: строка вида '09:00,13:00,18:00'
+def publish_post_task(post_id, telegram_bot_token, chat_id):
+    db = SessionLocal()
+    try:
+        post = db.query(GeneratedPost).filter_by(id=post_id).first()
+        if not post or post.published:
+            return
+        bot = Bot(token=telegram_bot_token)
+        try:
+            bot.send_message(chat_id=chat_id, text=post.content, parse_mode='Markdown')
+            post.published = True
+            post.published_at = datetime.utcnow()
+            db.commit()
+        except Exception as e:
+            logging.error(f"Ошибка публикации поста {post_id} в Telegram: {e}")
+    finally:
+        db.close()
+
+
+@app.task
+def autopost_task(schedule, telegram_bot_token, chat_id):
     import time
-    from telegram import Bot
     db = SessionLocal()
     try:
         times = [s.strip() for s in schedule.split(',') if s.strip()]
         posts = db.query(GeneratedPost).filter_by(published=False).order_by(GeneratedPost.created_at).all()
         bot = Bot(token=telegram_bot_token)
         for i, post in enumerate(posts):
-            # Ждём до нужного времени (упрощённо: публикуем сразу)
-            # В реальной задаче — cron или отдельный воркер
-            bot.send_message(chat_id='@your_channel', text=post.content)
-            post.published = True
-            post.published_at = datetime.utcnow()
-            db.commit()
+            try:
+                bot.send_message(chat_id=chat_id, text=post.content, parse_mode='Markdown')
+                post.published = True
+                post.published_at = datetime.utcnow()
+                db.commit()
+            except Exception as e:
+                logging.error(f"Ошибка автопостинга поста {post.id}: {e}")
             time.sleep(5)  # Для теста, потом убрать
     finally:
         db.close()

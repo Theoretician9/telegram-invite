@@ -35,6 +35,10 @@
           <input type="text" class="form-control" id="telegram_bot_token" name="telegram_bot_token" required>
         </div>
         <div class="mb-3">
+          <label for="chat_id" class="form-label">Chat ID (канал или чат для публикации)</label>
+          <input type="text" class="form-control" id="chat_id" name="chat_id" required placeholder="@your_channel или -100...">
+        </div>
+        <div class="mb-3">
           <label for="analysis_prompt" class="form-label">Промпт для анализа</label>
           <textarea class="form-control" id="analysis_prompt" name="analysis_prompt" rows="4" required>Ты литературный редактор. Проанализируй текст и выдели:
 1. Основные темы и идеи
@@ -202,11 +206,24 @@ async function updatePostsLog() {
             <b>${post.published ? '✅' : '🕓'} ${post.created_at}</b><br>
             <span>${post.content.substring(0, 200)}${post.content.length > 200 ? '...' : ''}</span><br>
             <small>Статус: ${post.published ? 'Опубликован' : 'Ожидает'}</small>
+            ${!post.published ? `<button class='btn btn-sm btn-primary mt-2' onclick='publishPost(${post.id})'>Опубликовать</button>` : ''}
         </div>
     `).join('');
 }
 setInterval(updatePostsLog, 5000);
 updatePostsLog();
+
+async function publishPost(postId) {
+    if (!confirm('Опубликовать этот пост в Telegram?')) return;
+    const resp = await fetch('/api/book_analyzer/publish_post', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ post_id: postId })
+    });
+    const data = await resp.json();
+    alert(data.status === 'ok' ? 'Пост опубликован!' : (data.error || 'Ошибка публикации'));
+    updatePostsLog();
+}
 
 // Загружаем сохраненные промпты при открытии страницы
 async function loadPrompts() {
