@@ -307,9 +307,9 @@ def split_text_into_chunks(text, chunk_size):
 
 def analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_key=None):
     together_models = {
-        'deepseek-v3-0324': 'deepseek-ai/deepseek-coder-33b-instruct',
-        'llama-4-maverick': 'meta-llama/Llama-2-70b-chat-hf',
-        'llama-3.3-70b-turbo': 'meta-llama/Llama-2-70b-chat-hf',
+        'deepseek-v3-0324': 'deepseek-ai/DeepSeek-V3',
+        'llama-4-maverick': 'meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8',
+        'llama-3.3-70b-turbo': 'meta-llama/Llama-3.3-70B-Instruct-Turbo-Free',
     }
     if gpt_model in together_models:
         url = 'https://api.together.xyz/v1/chat/completions'
@@ -407,9 +407,9 @@ def generate_post_task(analysis_path, prompt, gpt_api_key, gpt_model=None, toget
     with open(analysis_path, 'r', encoding='utf-8') as f:
         analysis = f.read()
     together_models = {
-        'deepseek-v3-0324': 'deepseek-ai/deepseek-coder-33b-instruct',
-        'llama-4-maverick': 'meta-llama/Llama-2-70b-chat-hf',
-        'llama-3.3-70b-turbo': 'meta-llama/Llama-2-70b-chat-hf',
+        'deepseek-v3-0324': 'deepseek-ai/DeepSeek-V3',
+        'llama-4-maverick': 'meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8',
+        'llama-3.3-70b-turbo': 'meta-llama/Llama-3.3-70B-Instruct-Turbo-Free',
     }
     if gpt_model in together_models:
         url = 'https://api.together.xyz/v1/chat/completions'
