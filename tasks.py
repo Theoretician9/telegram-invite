@@ -404,6 +404,7 @@ def generate_post_task(analysis_path, prompt, gpt_api_key):
 
 @app.task
 def publish_post_task(post_id, telegram_bot_token, chat_id, force=False):
+    import asyncio
     db = SessionLocal()
     try:
         post = db.query(GeneratedPost).filter_by(id=post_id).first()
@@ -413,43 +414,37 @@ def publish_post_task(post_id, telegram_bot_token, chat_id, force=False):
         if post.published and not force:
             logging.info(f"[TG] Пропуск публикации: post_id={post_id}, уже опубликован.")
             return
-            
+
         logging.info(f"[TG] Публикация поста {post_id} в chat_id={chat_id}, токен={telegram_bot_token[:8]}...")
-        
-        # Создаем бота
-        bot = Bot(token=telegram_bot_token)
-        
-        try:
-            # Пробуем отправить сообщение напрямую
-            result = bot.send_message(
-                chat_id=chat_id,
-                text=post.content,
-                parse_mode='Markdown',
-                disable_web_page_preview=True
-            )
-            
-            logging.info(f"[TG] Успешно опубликовано: message_id={result.message_id}")
-            post.published = True
-            post.published_at = datetime.utcnow()
-            db.commit()
-            redis_client.delete(f'publish_error:{post_id}')
-            
-        except Exception as e:
-            error_msg = str(e)
-            logging.error(f"[TG] Ошибка публикации поста {post_id} в Telegram: {error_msg}")
-            logging.error(f"[TG] Детали ошибки: chat_id={chat_id}, token={telegram_bot_token[:8]}..., content_length={len(post.content)}")
-            
-            # Сохраняем ошибку в Redis
-            redis_client.set(f'publish_error:{post_id}', error_msg)
-            
-            # Если это ошибка с правами или доступом, логируем это отдельно
-            if "chat not found" in error_msg.lower():
-                logging.error("[TG] Чат не найден. Проверьте chat_id и права бота.")
-            elif "bot was blocked" in error_msg.lower():
-                logging.error("[TG] Бот заблокирован в чате.")
-            elif "not enough rights" in error_msg.lower():
-                logging.error("[TG] У бота недостаточно прав для публикации.")
-            
+
+        async def send():
+            from telegram import Bot
+            bot = Bot(token=telegram_bot_token)
+            try:
+                result = await bot.send_message(
+                    chat_id=chat_id,
+                    text=post.content,
+                    parse_mode='Markdown',
+                    disable_web_page_preview=True
+                )
+                logging.info(f"[TG] Успешно опубликовано: message_id={result.message_id}")
+                post.published = True
+                post.published_at = datetime.utcnow()
+                db.commit()
+                redis_client.delete(f'publish_error:{post_id}')
+            except Exception as e:
+                error_msg = str(e)
+                logging.error(f"[TG] Ошибка публикации поста {post_id} в Telegram: {error_msg}")
+                logging.error(f"[TG] Детали ошибки: chat_id={chat_id}, token={telegram_bot_token[:8]}..., content_length={len(post.content)}")
+                redis_client.set(f'publish_error:{post_id}', error_msg)
+                if "chat not found" in error_msg.lower():
+                    logging.error("[TG] Чат не найден. Проверьте chat_id и права бота.")
+                elif "bot was blocked" in error_msg.lower():
+                    logging.error("[TG] Бот заблокирован в чате.")
+                elif "not enough rights" in error_msg.lower():
+                    logging.error("[TG] У бота недостаточно прав для публикации.")
+
+        asyncio.run(send())
     finally:
         db.close()
 
