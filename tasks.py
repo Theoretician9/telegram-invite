@@ -396,15 +396,24 @@ def analyze_book_task(book_path, additional_prompt, gpt_api_key, gpt_model='gpt-
 
 
 @app.task
-def generate_post_task(analysis_path, prompt, gpt_api_key, gpt_model=None, together_api_key=None):
+def generate_post_task(index_path, prompt, gpt_api_key, gpt_model=None, together_api_key=None):
     # Читаем конфиг с промптами
     with open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
     post_prompt = config['post_prompt']
     if prompt:
         post_prompt += f"\n\nДополнительное задание: {prompt}"
-    with open(analysis_path, 'r', encoding='utf-8') as f:
-        analysis = f.read()
+    # Загружаем индекс выжимок
+    with open(index_path, 'r', encoding='utf-8') as f:
+        summaries_index = json.load(f)
+    # Ищем первую неиспользованную выжимку
+    summary_item = next((s for s in summaries_index if not s.get('used')), None)
+    if not summary_item:
+        raise Exception('Нет неиспользованных выжимок для генерации поста.')
+    # Загружаем саму выжимку
+    with open(summary_item['summary_path'], 'r', encoding='utf-8') as f:
+        summary_data = json.load(f)
+    summary_text = json.dumps(summary_data['summary'], ensure_ascii=False, indent=2)
     together_models = {
         'deepseek-v3-0324': 'deepseek-ai/DeepSeek-V3',
         'llama-4-maverick': 'meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8',
@@ -420,7 +429,7 @@ def generate_post_task(analysis_path, prompt, gpt_api_key, gpt_model=None, toget
             'model': together_models[gpt_model],
             'messages': [
                 {"role": "system", "content": post_prompt},
-                {"role": "user", "content": f"Создай пост на тему: {prompt}\n\nИспользуй этот анализ книги:\n{analysis}"}
+                {"role": "user", "content": f"Создай пост по выжимке главы:\n{summary_text}"}
             ],
             'temperature': 0.7,
             'max_tokens': 4096
@@ -437,7 +446,7 @@ def generate_post_task(analysis_path, prompt, gpt_api_key, gpt_model=None, toget
             model=gpt_model or 'gpt-4',
             messages=[
                 {"role": "system", "content": post_prompt},
-                {"role": "user", "content": f"Создай пост на тему: {prompt}\n\nИспользуй этот анализ книги:\n{analysis}"}
+                {"role": "user", "content": f"Создай пост по выжимке главы:\n{summary_text}"}
             ]
         )
         post = response.choices[0].message.content
@@ -445,7 +454,7 @@ def generate_post_task(analysis_path, prompt, gpt_api_key, gpt_model=None, toget
     db = SessionLocal()
     try:
         new_post = GeneratedPost(
-            book_filename=os.path.basename(analysis_path).replace('.analysis.json',''),
+            book_filename=os.path.basename(index_path).replace('.summaries_index.json',''),
             prompt=prompt,
             content=post,
             published=False,
@@ -455,6 +464,12 @@ def generate_post_task(analysis_path, prompt, gpt_api_key, gpt_model=None, toget
         db.commit()
     finally:
         db.close()
+    # Помечаем выжимку как использованную
+    for s in summaries_index:
+        if s['chapter'] == summary_item['chapter']:
+            s['used'] = True
+    with open(index_path, 'w', encoding='utf-8') as f:
+        json.dump(summaries_index, f, ensure_ascii=False, indent=2)
     return post
 
 
