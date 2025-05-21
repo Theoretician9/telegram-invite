@@ -290,20 +290,23 @@ def extract_text_from_pdf(pdf_path):
             text += page.extract_text() + "\n"
     return text
 
-def split_text_into_chunks(text, chunk_size):
-    """Разбивает текст на части по предложениям."""
-    sentences = re.split(r'(?<=[.!?])\s+', text)
-    chunks = []
-    current_chunk = ""
-    for sentence in sentences:
-        if len(current_chunk) + len(sentence) < chunk_size:
-            current_chunk += sentence + " "
+def split_text_into_chapters(text):
+    """Разбивает текст на главы по шаблонам 'Глава', 'Chapter', 'CHAPTER', 'ГЛАВА' и т.д."""
+    chapter_pattern = re.compile(r'((?:Глава|ГЛАВА|Chapter|CHAPTER)\s+\d+)', re.IGNORECASE)
+    parts = chapter_pattern.split(text)
+    chapters = []
+    current_title = None
+    for part in parts:
+        if chapter_pattern.match(part):
+            current_title = part.strip()
+            chapters.append({'title': current_title, 'text': ''})
+        elif chapters:
+            chapters[-1]['text'] += part
         else:
-            chunks.append(current_chunk.strip())
-            current_chunk = sentence + " "
-    if current_chunk:
-        chunks.append(current_chunk.strip())
-    return chunks
+            # Пролог или вступление до первой главы
+            if part.strip():
+                chapters.append({'title': 'Вступление', 'text': part})
+    return [ch for ch in chapters if ch['text'].strip()]
 
 def analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_key=None):
     together_models = {
@@ -355,42 +358,38 @@ def analyze_book_task(book_path, additional_prompt, gpt_api_key, gpt_model='gpt-
     else:
         with open(book_path, 'r', encoding='utf-8') as f:
             text = f.read()
-    # chunk_size по модели
-    if gpt_model == 'gpt-3.5-turbo-1106':
-        chunk_size = 40000
-    elif gpt_model == 'gpt-4o':
-        chunk_size = 320000
-    elif gpt_model == 'gpt-4.1-nano':
-        chunk_size = 320000
-    elif gpt_model in ['deepseek-v3-0324', 'llama-4-maverick', 'llama-3.3-70b-turbo']:
-        chunk_size = 32000
-    else:
-        chunk_size = 8000
-    chunks = split_text_into_chunks(text, chunk_size)
+    # Разбиваем на главы
+    chapters = split_text_into_chapters(text)
     status_key = f"analyze_status:{os.path.basename(book_path)}"
-    redis_client.hmset(status_key, {"status": "started", "progress": 0, "total": len(chunks)})
+    redis_client.hmset(status_key, {"status": "started", "progress": 0, "total": len(chapters)})
+    summaries_index = []
     try:
-        analyses = []
-        for i, chunk in enumerate(chunks):
+        for i, chapter in enumerate(chapters):
+            chunk = chapter['text']
+            title = chapter['title']
             analysis = analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_key)
             try:
                 analysis_json = json.loads(analysis)
-                analyses.append(analysis_json)
             except json.JSONDecodeError:
-                analyses.append({"raw_analysis": analysis})
-            redis_client.hmset(status_key, {"status": "in_progress", "progress": i+1, "total": len(chunks)})
-        combined_analysis = {
-            "book_name": os.path.basename(book_path),
-            "analysis_date": datetime.now().isoformat(),
-            "total_chunks": len(chunks),
-            "analyses": analyses
-        }
-        analysis_filename = os.path.basename(book_path) + '.analysis.json'
-        analysis_path = os.path.join(ANALYSES_DIR, analysis_filename)
-        with open(analysis_path, 'w', encoding='utf-8') as f:
-            json.dump(combined_analysis, f, ensure_ascii=False, indent=2)
-        redis_client.hmset(status_key, {"status": "done", "progress": len(chunks), "total": len(chunks), "result_path": analysis_path})
-        return analysis_path
+                analysis_json = {"raw_analysis": analysis}
+            summary_filename = f"{os.path.basename(book_path)}_chapter_{i+1}.summary.json"
+            summary_path = os.path.join(ANALYSES_DIR, summary_filename)
+            with open(summary_path, 'w', encoding='utf-8') as f:
+                json.dump({"title": title, "summary": analysis_json}, f, ensure_ascii=False, indent=2)
+            summaries_index.append({
+                "chapter": i+1,
+                "title": title,
+                "summary_path": summary_path,
+                "used": False
+            })
+            redis_client.hmset(status_key, {"status": "in_progress", "progress": i+1, "total": len(chapters)})
+        # Сохраняем индекс глав
+        index_filename = os.path.basename(book_path) + '.summaries_index.json'
+        index_path = os.path.join(ANALYSES_DIR, index_filename)
+        with open(index_path, 'w', encoding='utf-8') as f:
+            json.dump(summaries_index, f, ensure_ascii=False, indent=2)
+        redis_client.hmset(status_key, {"status": "done", "progress": len(chapters), "total": len(chapters), "result_path": index_path})
+        return index_path
     except Exception as e:
         redis_client.hmset(status_key, {"status": "error", "error": str(e)})
         raise
