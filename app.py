@@ -769,6 +769,24 @@ async def serve_book_analyzer_config():
     except FileNotFoundError:
         return '{}', 200, {'Content-Type': 'application/json; charset=utf-8'}
 
+@app.route('/api/book_analyzer/summaries', methods=['GET'])
+async def get_summaries():
+    analyses_dir = os.path.join(os.path.dirname(__file__), 'analyses')
+    index_files = sorted(glob.glob(os.path.join(analyses_dir, '*.summaries_index.json')), key=os.path.getmtime, reverse=True)
+    if not index_files:
+        return jsonify({'status': 'error', 'error': 'Нет проанализированных книг'}), 404
+    index_path = index_files[0]
+    with open(index_path, 'r', encoding='utf-8') as f:
+        summaries = json.load(f)
+    # Только нужные поля
+    result = [{
+        'chapter': s['chapter'],
+        'title': s['title'],
+        'used': s.get('used', False),
+        'summary_path': s['summary_path']
+    } for s in summaries]
+    return jsonify({'status': 'ok', 'summaries': result, 'index_path': index_path})
+
 if __name__ == '__main__':
     import hypercorn.asyncio
     import hypercorn.config
