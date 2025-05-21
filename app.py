@@ -603,6 +603,7 @@ async def upload_book():
 async def save_keys():
     form = await request.form
     gpt_api_key = form.get('gpt_api_key')
+    together_api_key = form.get('together_api_key')
     gpt_model = form.get('gpt_model', 'gpt-3.5-turbo-1106')
     telegram_bot_token = form.get('telegram_bot_token')
     chat_id = form.get('chat_id')
@@ -611,6 +612,7 @@ async def save_keys():
     with open('book_analyzer_config.json', 'w', encoding='utf-8') as f:
         json.dump({
             'gpt_api_key': gpt_api_key,
+            'together_api_key': together_api_key,
             'gpt_model': gpt_model,
             'telegram_bot_token': telegram_bot_token,
             'chat_id': chat_id,
@@ -648,13 +650,15 @@ async def analyze_book():
     with open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
     gpt_model = config.get('gpt_model', 'gpt-3.5-turbo')
+    together_api_key = config.get('together_api_key')
+    gpt_api_key = config.get('gpt_api_key')
     # Для простоты берём последнюю загруженную книгу
     books = sorted(os.listdir(UPLOAD_DIR), key=lambda x: os.path.getctime(os.path.join(UPLOAD_DIR, x)), reverse=True)
     if not books:
         return jsonify({'error': 'No book uploaded'}), 400
     book_path = os.path.join(UPLOAD_DIR, books[0])
     from tasks import analyze_book_task
-    analyze_book_task.delay(book_path, prompt, config['gpt_api_key'], gpt_model)
+    analyze_book_task.delay(book_path, prompt, gpt_api_key, gpt_model, together_api_key)
     return jsonify({'status': 'started'})
 
 @app.route('/api/book_analyzer/generate_post', methods=['POST'])
@@ -671,7 +675,7 @@ async def generate_post():
         keys = json.load(f)
     prompt = (await request.form).get('prompt', 'Сделай пост по материалу книги')
     from tasks import generate_post_task
-    generate_post_task.delay(analysis_path, prompt, keys['gpt_api_key'])
+    generate_post_task.delay(analysis_path, prompt, keys['gpt_api_key'], keys.get('gpt_model'), keys.get('together_api_key'))
     return jsonify({'status': 'started'})
 
 @app.route('/api/book_analyzer/start_autopost', methods=['POST'])
