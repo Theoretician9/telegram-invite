@@ -219,6 +219,8 @@ document.getElementById('generate-form').onsubmit = async function(e) {
 document.getElementById('autopost-form').onsubmit = async function(e) {
     e.preventDefault();
     const formData = new FormData(this);
+    const schedule = document.getElementById('schedule').value;
+    localStorage.setItem('autopost_schedule', schedule);
     const resp = await fetch('/api/book_analyzer/start_autopost', {method: 'POST', body: formData});
     const data = await resp.json();
     if (data.status === 'started') {
@@ -372,5 +374,27 @@ async function loadSummaries() {
 
 // Загружать список выжимок после анализа и при загрузке страницы
 loadSummaries();
+
+async function loadAutopostStatus() {
+    try {
+        const resp = await fetch('/api/book_analyzer/autopost_status');
+        const data = await resp.json();
+        const statusDiv = document.getElementById('autopost-status');
+        const scheduleInput = document.getElementById('schedule');
+        if (data.active) {
+            statusDiv.innerHTML = '<div class="alert alert-warning">Автопостинг запущен!</div>';
+            if (data.schedule) scheduleInput.value = data.schedule;
+        } else {
+            statusDiv.innerHTML = '';
+            // Если есть сохранённое расписание в localStorage — подставить
+            if (localStorage.getItem('autopost_schedule')) {
+                scheduleInput.value = localStorage.getItem('autopost_schedule');
+            }
+        }
+    } catch (e) {}
+}
+
+// При загрузке страницы
+loadAutopostStatus();
 </script>
 {% endblock %} 

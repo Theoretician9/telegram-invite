@@ -6,7 +6,7 @@ import time
 import logging
 import pymysql
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import redis
 from models import GeneratedPost, Base
 from sqlalchemy.orm import sessionmaker
@@ -524,93 +524,122 @@ def publish_post_task(post_id, telegram_bot_token, chat_id, force=False):
 def autopost_task(schedule, telegram_bot_token, chat_id, index_path, gpt_api_key, gpt_model=None, together_api_key=None):
     import time
     import asyncio
+    from datetime import datetime, timedelta
     db = SessionLocal()
     try:
         # Загружаем индекс выжимок
         with open(index_path, 'r', encoding='utf-8') as f:
             summaries_index = json.load(f)
         times = [s.strip() for s in schedule.split(',') if s.strip()]
+        # Преобразуем времена в список (часы, минуты)
+        time_slots = []
+        for t in times:
+            try:
+                h, m = map(int, t.split(':'))
+                time_slots.append((h, m))
+            except Exception:
+                continue
         together_models = {
             'deepseek-v3-0324': 'deepseek-ai/DeepSeek-V3',
             'llama-4-maverick': 'meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8',
             'llama-3.3-70b-turbo': 'meta-llama/Llama-3.3-70B-Instruct-Turbo-Free',
         }
-        async def send_all():
+        async def autopost_loop():
             from telegram import Bot
             bot = Bot(token=telegram_bot_token)
-            for t in times:
-                # Берём первую неиспользованную выжимку
-                summary_item = next((s for s in summaries_index if not s.get('used')), None)
-                if not summary_item:
-                    logging.info('[autopost_task] Все выжимки использованы, автопостинг завершён.')
-                    break
-                with open(summary_item['summary_path'], 'r', encoding='utf-8') as f:
-                    summary_data = json.load(f)
-                summary_text = json.dumps(summary_data['summary'], ensure_ascii=False, indent=2)
-                # Генерируем пост
-                post = None
-                if gpt_model in together_models:
-                    url = 'https://api.together.xyz/v1/chat/completions'
-                    headers = {
-                        'Authorization': f'Bearer {together_api_key}',
-                        'Content-Type': 'application/json'
-                    }
-                    payload = {
-                        'model': together_models[gpt_model],
-                        'messages': [
-                            {"role": "system", "content": 'Автогенерация поста для Telegram-канала.'},
-                            {"role": "user", "content": f"Создай пост по выжимке главы:\n{summary_text}"}
-                        ],
-                        'temperature': 0.7,
-                        'max_tokens': 4096
-                    }
-                    resp = requests.post(url, headers=headers, json=payload, timeout=120)
-                    if not resp.ok:
-                        logging.error(f"Together.ai {gpt_model} error: {resp.status_code} {resp.text}")
-                        print(f"Together.ai {gpt_model} error: {resp.status_code} {resp.text}")
-                    resp.raise_for_status()
-                    post = resp.json()['choices'][0]['message']['content']
-                else:
-                    client = openai.OpenAI(api_key=gpt_api_key)
-                    response = client.chat.completions.create(
-                        model=gpt_model or 'gpt-4',
-                        messages=[
-                            {"role": "system", "content": 'Автогенерация поста для Telegram-канала.'},
-                            {"role": "user", "content": f"Создай пост по выжимке главы:\n{summary_text}"}
-                        ]
+            while True:
+                now = datetime.now()
+                # Сортируем слоты на сегодня и завтра
+                slots_today = []
+                slots_tomorrow = []
+                for h, m in time_slots:
+                    slot_time = now.replace(hour=h, minute=m, second=0, microsecond=0)
+                    if slot_time > now:
+                        slots_today.append(slot_time)
+                    else:
+                        slots_tomorrow.append(slot_time + timedelta(days=1))
+                # Сначала все оставшиеся на сегодня, потом на завтра
+                for slot_time in sorted(slots_today + slots_tomorrow):
+                    # Ждём до наступления времени
+                    now2 = datetime.now()
+                    wait_sec = (slot_time - now2).total_seconds()
+                    if wait_sec > 0:
+                        await asyncio.sleep(wait_sec)
+                    # Берём первую неиспользованную выжимку
+                    summary_item = next((s for s in summaries_index if not s.get('used')), None)
+                    if not summary_item:
+                        logging.info('[autopost_task] Все выжимки использованы, автопостинг завершён.')
+                        return
+                    with open(summary_item['summary_path'], 'r', encoding='utf-8') as f:
+                        summary_data = json.load(f)
+                    summary_text = json.dumps(summary_data['summary'], ensure_ascii=False, indent=2)
+                    # Генерируем пост
+                    post = None
+                    if gpt_model in together_models:
+                        url = 'https://api.together.xyz/v1/chat/completions'
+                        headers = {
+                            'Authorization': f'Bearer {together_api_key}',
+                            'Content-Type': 'application/json'
+                        }
+                        payload = {
+                            'model': together_models[gpt_model],
+                            'messages': [
+                                {"role": "system", "content": 'Автогенерация поста для Telegram-канала.'},
+                                {"role": "user", "content": f"Создай пост по выжимке главы:\n{summary_text}"}
+                            ],
+                            'temperature': 0.7,
+                            'max_tokens': 4096
+                        }
+                        resp = requests.post(url, headers=headers, json=payload, timeout=120)
+                        if not resp.ok:
+                            logging.error(f"Together.ai {gpt_model} error: {resp.status_code} {resp.text}")
+                            print(f"Together.ai {gpt_model} error: {resp.status_code} {resp.text}")
+                        resp.raise_for_status()
+                        post = resp.json()['choices'][0]['message']['content']
+                    else:
+                        client = openai.OpenAI(api_key=gpt_api_key)
+                        response = client.chat.completions.create(
+                            model=gpt_model or 'gpt-4',
+                            messages=[
+                                {"role": "system", "content": 'Автогенерация поста для Telegram-канала.'},
+                                {"role": "user", "content": f"Создай пост по выжимке главы:\n{summary_text}"}
+                            ]
+                        )
+                        post = response.choices[0].message.content
+                    # Сохраняем пост в БД
+                    new_post = GeneratedPost(
+                        book_filename=os.path.basename(index_path).replace('.summaries_index.json',''),
+                        prompt='Автогенерация',
+                        content=post,
+                        published=False,
+                        created_at=datetime.utcnow()
                     )
-                    post = response.choices[0].message.content
-                # Сохраняем пост в БД
-                new_post = GeneratedPost(
-                    book_filename=os.path.basename(index_path).replace('.summaries_index.json',''),
-                    prompt='Автогенерация',
-                    content=post,
-                    published=False,
-                    created_at=datetime.utcnow()
-                )
-                db.add(new_post)
-                db.commit()
-                # Помечаем выжимку как использованную
-                for s in summaries_index:
-                    if s['chapter'] == summary_item['chapter']:
-                        s['used'] = True
-                with open(index_path, 'w', encoding='utf-8') as f:
-                    json.dump(summaries_index, f, ensure_ascii=False, indent=2)
-                # Публикуем пост
-                try:
-                    result = await bot.send_message(
-                        chat_id=chat_id,
-                        text=post,
-                        parse_mode='Markdown',
-                        disable_web_page_preview=True
-                    )
-                    logging.info(f"[autopost_task] Успешно опубликовано: message_id={result.message_id}")
-                    new_post.published = True
-                    new_post.published_at = datetime.utcnow()
+                    db.add(new_post)
                     db.commit()
-                except Exception as e:
-                    logging.error(f"[autopost_task] Ошибка публикации: {e}")
-                await asyncio.sleep(5)  # Можно заменить на реальное расписание
-        asyncio.run(send_all())
+                    # Помечаем выжимку как использованную
+                    for s in summaries_index:
+                        if s['chapter'] == summary_item['chapter']:
+                            s['used'] = True
+                    with open(index_path, 'w', encoding='utf-8') as f:
+                        json.dump(summaries_index, f, ensure_ascii=False, indent=2)
+                    # Публикуем пост
+                    try:
+                        result = await bot.send_message(
+                            chat_id=chat_id,
+                            text=post,
+                            parse_mode='Markdown',
+                            disable_web_page_preview=True
+                        )
+                        logging.info(f"[autopost_task] Успешно опубликовано: message_id={result.message_id}")
+                        new_post.published = True
+                        new_post.published_at = datetime.utcnow()
+                        db.commit()
+                    except Exception as e:
+                        logging.error(f"[autopost_task] Ошибка публикации: {e}")
+                # После всех слотов ждём до следующего дня
+                now3 = datetime.now()
+                tomorrow = now3.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+                await asyncio.sleep((tomorrow - now3).total_seconds())
+        asyncio.run(autopost_loop())
     finally:
         db.close()
