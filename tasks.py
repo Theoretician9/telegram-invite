@@ -529,12 +529,14 @@ def publish_post_task(post_id, telegram_bot_token, chat_id, force=False):
 def autopost_task(schedule, telegram_bot_token, chat_id, index_path, gpt_api_key, gpt_model=None, together_api_key=None):
     import time
     import asyncio
+    from datetime import datetime, timedelta
     db = SessionLocal()
     try:
         # Загружаем индекс выжимок
         with open(index_path, 'r', encoding='utf-8') as f:
             summaries_index = json.load(f)
         times = [s.strip() for s in schedule.split(',') if s.strip()]
+        logging.info(f"[autopost_task] Старт задачи. Moscow now: {datetime.now(ZoneInfo('Europe/Moscow'))}. Schedule: {times}")
         # Преобразуем времена в список (часы, минуты)
         time_slots = []
         for t in times:
@@ -542,6 +544,7 @@ def autopost_task(schedule, telegram_bot_token, chat_id, index_path, gpt_api_key
                 h, m = map(int, t.split(':'))
                 time_slots.append((h, m))
             except Exception:
+                logging.error(f"[autopost_task] Ошибка парсинга времени: {t}")
                 continue
         together_models = {
             'deepseek-v3-0324': 'deepseek-ai/DeepSeek-V3',
@@ -554,6 +557,7 @@ def autopost_task(schedule, telegram_bot_token, chat_id, index_path, gpt_api_key
             tz = ZoneInfo('Europe/Moscow')
             while True:
                 now = datetime.now(tz)
+                logging.info(f"[autopost_task] Новый цикл. Moscow now: {now}")
                 # Сортируем слоты на сегодня и завтра
                 slots_today = []
                 slots_tomorrow = []
@@ -563,11 +567,12 @@ def autopost_task(schedule, telegram_bot_token, chat_id, index_path, gpt_api_key
                         slots_today.append(slot_time)
                     else:
                         slots_tomorrow.append(slot_time + timedelta(days=1))
-                # Сначала все оставшиеся на сегодня, потом на завтра
-                for slot_time in sorted(slots_today + slots_tomorrow):
-                    # Ждём до наступления времени
+                all_slots = sorted(slots_today + slots_tomorrow)
+                logging.info(f"[autopost_task] Слоты на публикацию: {[s.strftime('%Y-%m-%d %H:%M') for s in all_slots]}")
+                for slot_time in all_slots:
                     now2 = datetime.now(tz)
                     wait_sec = (slot_time - now2).total_seconds()
+                    logging.info(f"[autopost_task] Ждём до {slot_time.strftime('%Y-%m-%d %H:%M')} (через {wait_sec:.1f} сек). Moscow now: {now2}")
                     if wait_sec > 0:
                         await asyncio.sleep(wait_sec)
                     # Берём первую неиспользованную выжимку
@@ -635,7 +640,7 @@ def autopost_task(schedule, telegram_bot_token, chat_id, index_path, gpt_api_key
                             parse_mode='Markdown',
                             disable_web_page_preview=True
                         )
-                        logging.info(f"[autopost_task] Успешно опубликовано: message_id={result.message_id}")
+                        logging.info(f"[autopost_task] Успешно опубликовано: message_id={result.message_id} в {slot_time.strftime('%Y-%m-%d %H:%M')}")
                         new_post.published = True
                         new_post.published_at = datetime.utcnow()
                         db.commit()
@@ -644,6 +649,7 @@ def autopost_task(schedule, telegram_bot_token, chat_id, index_path, gpt_api_key
                 # После всех слотов ждём до следующего дня
                 now3 = datetime.now(tz)
                 tomorrow = now3.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+                logging.info(f"[autopost_task] Все слоты на сегодня обработаны. Ждём до завтра: {tomorrow.strftime('%Y-%m-%d %H:%M')}")
                 await asyncio.sleep((tomorrow - now3).total_seconds())
         asyncio.run(autopost_loop())
     finally:
