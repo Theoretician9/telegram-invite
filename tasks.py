@@ -525,8 +525,8 @@ def publish_post_task(post_id, telegram_bot_token, chat_id, force=False):
         db.close()
 
 
-@app.task
-def autopost_task(schedule, telegram_bot_token, chat_id, index_path, gpt_api_key, gpt_model=None, together_api_key=None):
+@app.task(bind=True)
+def autopost_task(self, schedule, telegram_bot_token, chat_id, index_path, gpt_api_key, gpt_model=None, together_api_key=None):
     import time
     import asyncio
     from datetime import datetime, timedelta
@@ -555,7 +555,14 @@ def autopost_task(schedule, telegram_bot_token, chat_id, index_path, gpt_api_key
             from telegram import Bot
             bot = Bot(token=telegram_bot_token)
             tz = ZoneInfo('Europe/Moscow')
+            REDIS_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
+            redis_client = redis.Redis.from_url(REDIS_URL)
+            stop_key = f'autopost_stop:{self.request.id}'
             while True:
+                # Проверка флага остановки
+                if redis_client.get(stop_key):
+                    logging.info(f"[autopost_task] Получен сигнал остановки (stop_key={stop_key}), задача завершена.")
+                    return
                 now = datetime.now(tz)
                 logging.info(f"[autopost_task] Новый цикл. Moscow now: {now}")
                 # Сортируем слоты на сегодня и завтра
@@ -570,11 +577,23 @@ def autopost_task(schedule, telegram_bot_token, chat_id, index_path, gpt_api_key
                 all_slots = sorted(slots_today + slots_tomorrow)
                 logging.info(f"[autopost_task] Слоты на публикацию: {[s.strftime('%Y-%m-%d %H:%M') for s in all_slots]}")
                 for slot_time in all_slots:
+                    # Проверка флага остановки перед каждым слотом
+                    if redis_client.get(stop_key):
+                        logging.info(f"[autopost_task] Получен сигнал остановки (stop_key={stop_key}), задача завершена.")
+                        return
                     now2 = datetime.now(tz)
                     wait_sec = (slot_time - now2).total_seconds()
                     logging.info(f"[autopost_task] Ждём до {slot_time.strftime('%Y-%m-%d %H:%M')} (через {wait_sec:.1f} сек). Moscow now: {now2}")
                     if wait_sec > 0:
-                        await asyncio.sleep(wait_sec)
+                        # Проверка флага остановки во время ожидания
+                        for _ in range(int(wait_sec // 5)):
+                            if redis_client.get(stop_key):
+                                logging.info(f"[autopost_task] Получен сигнал остановки (stop_key={stop_key}), задача завершена.")
+                                return
+                            await asyncio.sleep(5)
+                        remain = wait_sec % 5
+                        if remain > 0:
+                            await asyncio.sleep(remain)
                     # Берём первую неиспользованную выжимку
                     summary_item = next((s for s in summaries_index if not s.get('used')), None)
                     if not summary_item:
@@ -650,7 +669,16 @@ def autopost_task(schedule, telegram_bot_token, chat_id, index_path, gpt_api_key
                 now3 = datetime.now(tz)
                 tomorrow = now3.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
                 logging.info(f"[autopost_task] Все слоты на сегодня обработаны. Ждём до завтра: {tomorrow.strftime('%Y-%m-%d %H:%M')}")
-                await asyncio.sleep((tomorrow - now3).total_seconds())
+                # Проверка флага остановки во время ожидания до завтра
+                wait_to_tomorrow = (tomorrow - now3).total_seconds()
+                for _ in range(int(wait_to_tomorrow // 5)):
+                    if redis_client.get(stop_key):
+                        logging.info(f"[autopost_task] Получен сигнал остановки (stop_key={stop_key}), задача завершена.")
+                        return
+                    await asyncio.sleep(5)
+                remain = wait_to_tomorrow % 5
+                if remain > 0:
+                    await asyncio.sleep(remain)
         asyncio.run(autopost_loop())
     finally:
         db.close()
