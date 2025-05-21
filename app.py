@@ -759,6 +759,16 @@ async def publish_post():
     finally:
         db.close()
 
+@app.route('/book_analyzer_config.json', methods=['GET'])
+async def serve_book_analyzer_config():
+    import aiofiles
+    try:
+        async with aiofiles.open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
+            content = await f.read()
+        return content, 200, {'Content-Type': 'application/json; charset=utf-8'}
+    except FileNotFoundError:
+        return '{}', 200, {'Content-Type': 'application/json; charset=utf-8'}
+
 if __name__ == '__main__':
     import hypercorn.asyncio
     import hypercorn.config

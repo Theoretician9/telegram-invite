@@ -154,6 +154,7 @@ document.getElementById('keys-form').onsubmit = async function(e) {
     const resp = await fetch('/api/book_analyzer/save_keys', {method: 'POST', body: formData});
     const data = await resp.json();
     alert(data.status === 'ok' ? 'Ключи сохранены!' : data.error);
+    if (data.status === 'ok') loadPrompts();
 };
 
 document.getElementById('analyze-form').onsubmit = async function(e) {
@@ -238,6 +239,16 @@ async function loadPrompts() {
         if (data.status === 'ok') {
             document.getElementById('analysis_prompt').value = data.analysis_prompt;
             document.getElementById('post_prompt').value = data.post_prompt;
+            if (data.gpt_model) document.getElementById('gpt_model').value = data.gpt_model;
+            if (data.chat_id) document.getElementById('chat_id').value = data.chat_id;
+        }
+        // Загружаем ключи отдельно
+        const resp2 = await fetch('/book_analyzer_config.json');
+        if (resp2.ok) {
+            const config = await resp2.json();
+            if (config.gpt_api_key) document.getElementById('gpt_api_key').value = config.gpt_api_key;
+            if (config.together_api_key) document.getElementById('together_api_key').value = config.together_api_key;
+            if (config.telegram_bot_token) document.getElementById('telegram_bot_token').value = config.telegram_bot_token;
         }
     } catch (error) {
         console.error('Error loading prompts:', error);
