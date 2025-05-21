@@ -14,6 +14,7 @@ from sqlalchemy import create_engine
 import openai
 import PyPDF2
 import re
+import requests
 
 from celery_app import app
 from telethon.sync import TelegramClient
@@ -304,19 +305,37 @@ def split_text_into_chunks(text, chunk_size):
         chunks.append(current_chunk.strip())
     return chunks
 
-def analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model):
-    client = openai.OpenAI(api_key=gpt_api_key)
-    response = client.chat.completions.create(
-        model=gpt_model,
-        messages=[
-            {"role": "system", "content": analysis_prompt},
-            {"role": "user", "content": chunk}
-        ]
-    )
-    return response.choices[0].message.content
+def analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_key=None):
+    if gpt_model == 'deepseek-67b':
+        # Together.ai API
+        url = 'https://api.together.xyz/v1/chat/completions'
+        headers = {
+            'Authorization': f'Bearer {together_api_key}',
+            'Content-Type': 'application/json'
+        }
+        payload = {
+            'model': 'deepseek-67b-chat',
+            'messages': [
+                {"role": "system", "content": analysis_prompt},
+                {"role": "user", "content": chunk}
+            ]
+        }
+        resp = requests.post(url, headers=headers, json=payload, timeout=120)
+        resp.raise_for_status()
+        return resp.json()['choices'][0]['message']['content']
+    else:
+        client = openai.OpenAI(api_key=gpt_api_key)
+        response = client.chat.completions.create(
+            model=gpt_model,
+            messages=[
+                {"role": "system", "content": analysis_prompt},
+                {"role": "user", "content": chunk}
+            ]
+        )
+        return response.choices[0].message.content
 
 @app.task
-def analyze_book_task(book_path, additional_prompt, gpt_api_key, gpt_model='gpt-3.5-turbo-1106'):
+def analyze_book_task(book_path, additional_prompt, gpt_api_key, gpt_model='gpt-3.5-turbo-1106', together_api_key=None):
     with open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
     analysis_prompt = config['analysis_prompt']
@@ -334,6 +353,8 @@ def analyze_book_task(book_path, additional_prompt, gpt_api_key, gpt_model='gpt-
         chunk_size = 320000
     elif gpt_model == 'gpt-4.1-nano':
         chunk_size = 320000
+    elif gpt_model == 'deepseek-67b':
+        chunk_size = 32000
     else:
         chunk_size = 8000
     chunks = split_text_into_chunks(text, chunk_size)
@@ -342,7 +363,7 @@ def analyze_book_task(book_path, additional_prompt, gpt_api_key, gpt_model='gpt-
     try:
         analyses = []
         for i, chunk in enumerate(chunks):
-            analysis = analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model)
+            analysis = analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_key)
             try:
                 analysis_json = json.loads(analysis)
                 analyses.append(analysis_json)
@@ -367,7 +388,7 @@ def analyze_book_task(book_path, additional_prompt, gpt_api_key, gpt_model='gpt-
 
 
 @app.task
-def generate_post_task(analysis_path, prompt, gpt_api_key):
+def generate_post_task(analysis_path, prompt, gpt_api_key, gpt_model=None, together_api_key=None):
     # Читаем конфиг с промптами
     with open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
@@ -376,15 +397,32 @@ def generate_post_task(analysis_path, prompt, gpt_api_key):
         post_prompt += f"\n\nДополнительное задание: {prompt}"
     with open(analysis_path, 'r', encoding='utf-8') as f:
         analysis = f.read()
-    client = openai.OpenAI(api_key=gpt_api_key)
-    response = client.chat.completions.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": post_prompt},
-            {"role": "user", "content": f"Создай пост на тему: {prompt}\n\nИспользуй этот анализ книги:\n{analysis}"}
-        ]
-    )
-    post = response.choices[0].message.content
+    if gpt_model == 'deepseek-67b':
+        url = 'https://api.together.xyz/v1/chat/completions'
+        headers = {
+            'Authorization': f'Bearer {together_api_key}',
+            'Content-Type': 'application/json'
+        }
+        payload = {
+            'model': 'deepseek-67b-chat',
+            'messages': [
+                {"role": "system", "content": post_prompt},
+                {"role": "user", "content": f"Создай пост на тему: {prompt}\n\nИспользуй этот анализ книги:\n{analysis}"}
+            ]
+        }
+        resp = requests.post(url, headers=headers, json=payload, timeout=120)
+        resp.raise_for_status()
+        post = resp.json()['choices'][0]['message']['content']
+    else:
+        client = openai.OpenAI(api_key=gpt_api_key)
+        response = client.chat.completions.create(
+            model=gpt_model or 'gpt-4',
+            messages=[
+                {"role": "system", "content": post_prompt},
+                {"role": "user", "content": f"Создай пост на тему: {prompt}\n\nИспользуй этот анализ книги:\n{analysis}"}
+            ]
+        )
+        post = response.choices[0].message.content
     # Сохраняем пост в БД
     db = SessionLocal()
     try:
