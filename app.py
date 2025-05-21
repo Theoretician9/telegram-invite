@@ -750,7 +750,7 @@ async def publish_post():
         with open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
             config = json.load(f)
         from tasks import publish_post_task
-        publish_post_task.delay(post_id, config['telegram_bot_token'], config.get('chat_id'))
+        publish_post_task.delay(post_id, config['telegram_bot_token'], config.get('chat_id'), force)
         return jsonify({'status': 'ok'})
     finally:
         db.close()
