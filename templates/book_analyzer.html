@@ -206,22 +206,22 @@ async function updatePostsLog() {
             <b>${post.published ? '✅' : '🕓'} ${post.created_at}</b><br>
             <span>${post.content.substring(0, 200)}${post.content.length > 200 ? '...' : ''}</span><br>
             <small>Статус: ${post.published ? 'Опубликован' : 'Ожидает'}</small>
-            ${!post.published ? `<button class='btn btn-sm btn-primary mt-2' onclick='publishPost(${post.id})'>Опубликовать</button>` : ''}
+            ${!post.published ? `<button class='btn btn-sm btn-primary mt-2' onclick='publishPost(${post.id})'>Опубликовать</button>` : `<button class='btn btn-sm btn-warning mt-2' onclick='publishPost(${post.id}, true)'>Опубликовать повторно</button>`}
         </div>
     `).join('');
 }
 setInterval(updatePostsLog, 5000);
 updatePostsLog();
 
-async function publishPost(postId) {
-    if (!confirm('Опубликовать этот пост в Telegram?')) return;
+async function publishPost(postId, force=false) {
+    if (!confirm(force ? 'Опубликовать этот пост повторно в Telegram?' : 'Опубликовать этот пост в Telegram?')) return;
     const resp = await fetch('/api/book_analyzer/publish_post', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ post_id: postId })
+        body: JSON.stringify({ post_id: postId, force: !!force })
     });
     const data = await resp.json();
-    alert(data.status === 'ok' ? 'Пост опубликован!' : (data.error || 'Ошибка публикации'));
+    alert(data.status === 'ok' ? (force ? 'Пост опубликован повторно!' : 'Пост опубликован!') : (data.error || 'Ошибка публикации'));
     updatePostsLog();
 }
 

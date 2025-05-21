@@ -737,6 +737,7 @@ async def too_large(e):
 async def publish_post():
     data = await request.get_json()
     post_id = data.get('post_id')
+    force = data.get('force', False)
     if not post_id:
         return jsonify({'error': 'No post_id provided'}), 400
     db = SessionLocal()
@@ -744,7 +745,7 @@ async def publish_post():
         post = db.query(GeneratedPost).filter_by(id=post_id).first()
         if not post:
             return jsonify({'error': 'Post not found'}), 404
-        if post.published:
+        if post.published and not force:
             return jsonify({'error': 'Already published'}), 400
         with open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
             config = json.load(f)
