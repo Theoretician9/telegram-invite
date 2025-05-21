@@ -111,6 +111,14 @@
       </div>
     </div>
   </div>
+  <div class="card mt-4">
+    <div class="card-header">Лог сгенерированных постов</div>
+    <div class="card-body">
+      <div id="posts-log">
+        <!-- Здесь будет лог постов -->
+      </div>
+    </div>
+  </div>
 </div>
 <script>
 document.getElementById('book-form').onsubmit = async function(e) {
@@ -299,12 +307,25 @@ async function loadSummaries() {
         const resp = await fetch('/api/book_analyzer/summaries');
         const data = await resp.json();
         if (data.status === 'ok' && data.summaries.length) {
-            listDiv.innerHTML = data.summaries.map(s => `
+            // Для каждой главы подгружаем summary
+            const items = await Promise.all(data.summaries.map(async s => {
+                let summaryText = '';
+                try {
+                    const resp2 = await fetch('/download?file=' + encodeURIComponent(s.summary_path));
+                    if (resp2.ok) {
+                        const json = await resp2.json();
+                        summaryText = json.summary ? JSON.stringify(json.summary, null, 2) : JSON.stringify(json, null, 2);
+                    }
+                } catch (e) { summaryText = '[Ошибка загрузки summary]'; }
+                return `
                 <div class="mb-2 p-2 border ${s.used ? 'border-secondary bg-light' : 'border-success'}">
                   <b>Глава ${s.chapter}:</b> ${s.title} <br>
                   <span class="badge ${s.used ? 'bg-secondary' : 'bg-success'}">${s.used ? 'Использована' : 'Готова к посту'}</span>
+                  <pre style="background:#222;color:#bfb;white-space:pre-wrap;max-height:300px;overflow:auto;margin-top:8px;">${summaryText}</pre>
                 </div>
-            `).join('');
+                `;
+            }));
+            listDiv.innerHTML = items.join('');
         } else {
             listDiv.innerHTML = '<span class="text-muted">Нет выжимок. Проведите анализ книги.</span>';
         }
