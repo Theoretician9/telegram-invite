@@ -656,14 +656,14 @@ async def analyze_book():
 
 @app.route('/api/book_analyzer/generate_post', methods=['POST'])
 async def generate_post():
-    # Ищем последний успешно проанализированный файл
-    UPLOAD_DIR = os.path.join(os.path.dirname(__file__), 'uploads')
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-    analysis_files = [f for f in os.listdir(UPLOAD_DIR) if f.endswith('.analysis.json')]
+    # Ищем последний успешно проанализированный файл в analyses
+    ANALYSES_DIR = os.path.join(os.path.dirname(__file__), 'analyses')
+    os.makedirs(ANALYSES_DIR, exist_ok=True)
+    analysis_files = [f for f in os.listdir(ANALYSES_DIR) if f.endswith('.analysis.json')]
     if not analysis_files:
         return jsonify({'error': 'Book not analyzed yet'}), 400
-    analysis_files = sorted(analysis_files, key=lambda x: os.path.getctime(os.path.join(UPLOAD_DIR, x)), reverse=True)
-    analysis_path = os.path.join(UPLOAD_DIR, analysis_files[0])
+    analysis_files = sorted(analysis_files, key=lambda x: os.path.getctime(os.path.join(ANALYSES_DIR, x)), reverse=True)
+    analysis_path = os.path.join(ANALYSES_DIR, analysis_files[0])
     with open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
         keys = json.load(f)
     prompt = (await request.form).get('prompt', 'Сделай пост по материалу книги')
