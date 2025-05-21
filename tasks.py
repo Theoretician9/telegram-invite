@@ -323,6 +323,7 @@ def analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_k
         resp = requests.post(url, headers=headers, json=payload, timeout=120)
         if not resp.ok:
             logging.error(f"Together.ai DeepSeek 67B error: {resp.status_code} {resp.text}")
+            print(f"Together.ai DeepSeek 67B error: {resp.status_code} {resp.text}")
         resp.raise_for_status()
         return resp.json()['choices'][0]['message']['content']
     else:
@@ -415,6 +416,7 @@ def generate_post_task(analysis_path, prompt, gpt_api_key, gpt_model=None, toget
         resp = requests.post(url, headers=headers, json=payload, timeout=120)
         if not resp.ok:
             logging.error(f"Together.ai DeepSeek 67B error: {resp.status_code} {resp.text}")
+            print(f"Together.ai DeepSeek 67B error: {resp.status_code} {resp.text}")
         resp.raise_for_status()
         post = resp.json()['choices'][0]['message']['content']
     else:
