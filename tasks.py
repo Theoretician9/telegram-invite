@@ -307,9 +307,9 @@ def split_text_into_chunks(text, chunk_size):
 
 def analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_key=None):
     together_models = {
-        'deepseek-v3-0324': 'deepseek-ai/deepseek-v3',
-        'llama-4-maverick': 'meta-llama/Llama-4-Maverick',
-        'llama-3.3-70b-turbo': 'meta-llama/Llama-3.3-70B',
+        'deepseek-v3-0324': 'deepseek-ai/deepseek-coder-33b-instruct',
+        'llama-4-maverick': 'meta-llama/Llama-2-70b-chat-hf',
+        'llama-3.3-70b-turbo': 'meta-llama/Llama-2-70b-chat-hf',
     }
     if gpt_model in together_models:
         url = 'https://api.together.xyz/v1/chat/completions'
@@ -322,7 +322,9 @@ def analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_k
             'messages': [
                 {"role": "system", "content": analysis_prompt},
                 {"role": "user", "content": chunk}
-            ]
+            ],
+            'temperature': 0.7,
+            'max_tokens': 4096
         }
         resp = requests.post(url, headers=headers, json=payload, timeout=120)
         if not resp.ok:
@@ -405,9 +407,9 @@ def generate_post_task(analysis_path, prompt, gpt_api_key, gpt_model=None, toget
     with open(analysis_path, 'r', encoding='utf-8') as f:
         analysis = f.read()
     together_models = {
-        'deepseek-v3-0324': 'deepseek-ai/deepseek-v3',
-        'llama-4-maverick': 'meta-llama/Llama-4-Maverick',
-        'llama-3.3-70b-turbo': 'meta-llama/Llama-3.3-70B',
+        'deepseek-v3-0324': 'deepseek-ai/deepseek-coder-33b-instruct',
+        'llama-4-maverick': 'meta-llama/Llama-2-70b-chat-hf',
+        'llama-3.3-70b-turbo': 'meta-llama/Llama-2-70b-chat-hf',
     }
     if gpt_model in together_models:
         url = 'https://api.together.xyz/v1/chat/completions'
@@ -420,7 +422,9 @@ def generate_post_task(analysis_path, prompt, gpt_api_key, gpt_model=None, toget
             'messages': [
                 {"role": "system", "content": post_prompt},
                 {"role": "user", "content": f"Создай пост на тему: {prompt}\n\nИспользуй этот анализ книги:\n{analysis}"}
-            ]
+            ],
+            'temperature': 0.7,
+            'max_tokens': 4096
         }
         resp = requests.post(url, headers=headers, json=payload, timeout=120)
         if not resp.ok:
