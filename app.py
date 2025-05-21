@@ -692,10 +692,16 @@ async def start_autopost():
     index_files = sorted(index_files, key=lambda x: os.path.getctime(os.path.join(ANALYSES_DIR, x)), reverse=True)
     index_path = os.path.join(ANALYSES_DIR, index_files[0])
     from tasks import autopost_task
-    autopost_task.delay(schedule, keys['telegram_bot_token'], keys.get('chat_id'), index_path, keys['gpt_api_key'], keys.get('gpt_model'), keys.get('together_api_key'))
-    # Сохраняем статус автопостинга в Redis
+    # Останавливаем предыдущую задачу, если есть
     REDIS_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
     redis_client = redis.Redis.from_url(REDIS_URL)
+    prev_task_id = redis_client.get('autopost_task_id')
+    if prev_task_id:
+        redis_client.set(f'autopost_stop:{prev_task_id.decode()}', '1')
+    # Запускаем новую задачу
+    result = autopost_task.delay(schedule, keys['telegram_bot_token'], keys.get('chat_id'), index_path, keys['gpt_api_key'], keys.get('gpt_model'), keys.get('together_api_key'))
+    redis_client.set('autopost_task_id', result.id)
+    # Сохраняем статус автопостинга в Redis
     redis_client.hset('autopost_status', mapping={'active': '1', 'schedule': schedule})
     return jsonify({'status': 'started'})
 
