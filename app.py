@@ -693,6 +693,10 @@ async def start_autopost():
     index_path = os.path.join(ANALYSES_DIR, index_files[0])
     from tasks import autopost_task
     autopost_task.delay(schedule, keys['telegram_bot_token'], keys.get('chat_id'), index_path, keys['gpt_api_key'], keys.get('gpt_model'), keys.get('together_api_key'))
+    # Сохраняем статус автопостинга в Redis
+    REDIS_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
+    redis_client = redis.Redis.from_url(REDIS_URL)
+    redis_client.hset('autopost_status', mapping={'active': '1', 'schedule': schedule})
     return jsonify({'status': 'started'})
 
 @app.route('/api/book_analyzer/posts_log', methods=['GET'])
@@ -793,6 +797,16 @@ async def get_summaries():
         'summary_path': s['summary_path']
     } for s in summaries]
     return jsonify({'status': 'ok', 'summaries': result, 'index_path': index_path})
+
+@app.route('/api/book_analyzer/autopost_status', methods=['GET'])
+async def autopost_status():
+    REDIS_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
+    redis_client = redis.Redis.from_url(REDIS_URL)
+    status = redis_client.hgetall('autopost_status')
+    if not status:
+        return jsonify({'active': False, 'schedule': ''})
+    result = {k.decode(): v.decode() for k, v in status.items()}
+    return jsonify({'active': result.get('active') == '1', 'schedule': result.get('schedule', '')})
 
 if __name__ == '__main__':
     import hypercorn.asyncio
