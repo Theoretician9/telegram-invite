@@ -656,16 +656,14 @@ async def analyze_book():
 
 @app.route('/api/book_analyzer/generate_post', methods=['POST'])
 async def generate_post():
-    # Используем папку uploads для загруженных книг
+    # Ищем последний успешно проанализированный файл
     UPLOAD_DIR = os.path.join(os.path.dirname(__file__), 'uploads')
     os.makedirs(UPLOAD_DIR, exist_ok=True)
-    books = sorted(os.listdir(UPLOAD_DIR), key=lambda x: os.path.getctime(os.path.join(UPLOAD_DIR, x)), reverse=True)
-    if not books:
-        return jsonify({'error': 'No book uploaded'}), 400
-    book_path = os.path.join(UPLOAD_DIR, books[0])
-    analysis_path = book_path + '.analysis.json'
-    if not os.path.exists(analysis_path):
+    analysis_files = [f for f in os.listdir(UPLOAD_DIR) if f.endswith('.analysis.json')]
+    if not analysis_files:
         return jsonify({'error': 'Book not analyzed yet'}), 400
+    analysis_files = sorted(analysis_files, key=lambda x: os.path.getctime(os.path.join(UPLOAD_DIR, x)), reverse=True)
+    analysis_path = os.path.join(UPLOAD_DIR, analysis_files[0])
     with open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
         keys = json.load(f)
     prompt = (await request.form).get('prompt', 'Сделай пост по материалу книги')
