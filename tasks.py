@@ -415,8 +415,10 @@ def publish_post_task(post_id, telegram_bot_token, chat_id):
             post.published = True
             post.published_at = datetime.utcnow()
             db.commit()
+            redis_client.delete(f'publish_error:{post_id}')
         except Exception as e:
             logging.error(f"Ошибка публикации поста {post_id} в Telegram: {e}")
+            redis_client.set(f'publish_error:{post_id}', str(e))
     finally:
         db.close()
 
