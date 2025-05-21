@@ -452,19 +452,28 @@ def publish_post_task(post_id, telegram_bot_token, chat_id, force=False):
 @app.task
 def autopost_task(schedule, telegram_bot_token, chat_id):
     import time
+    import asyncio
     db = SessionLocal()
     try:
         times = [s.strip() for s in schedule.split(',') if s.strip()]
         posts = db.query(GeneratedPost).filter_by(published=False).order_by(GeneratedPost.created_at).all()
-        bot = Bot(token=telegram_bot_token)
-        for i, post in enumerate(posts):
-            try:
-                bot.send_message(chat_id=chat_id, text=post.content, parse_mode='Markdown')
-                post.published = True
-                post.published_at = datetime.utcnow()
-                db.commit()
-            except Exception as e:
-                logging.error(f"Ошибка автопостинга поста {post.id}: {e}")
-            time.sleep(5)  # Для теста, потом убрать
+        async def send_all():
+            from telegram import Bot
+            bot = Bot(token=telegram_bot_token)
+            for i, post in enumerate(posts):
+                try:
+                    await bot.send_message(
+                        chat_id=chat_id,
+                        text=post.content,
+                        parse_mode='Markdown',
+                        disable_web_page_preview=True
+                    )
+                    post.published = True
+                    post.published_at = datetime.utcnow()
+                    db.commit()
+                except Exception as e:
+                    logging.error(f"Ошибка автопостинга поста {post.id}: {e}")
+                await asyncio.sleep(5)  # Для теста, потом убрать
+        asyncio.run(send_all())
     finally:
         db.close()
