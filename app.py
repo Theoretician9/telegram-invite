@@ -663,19 +663,19 @@ async def analyze_book():
 
 @app.route('/api/book_analyzer/generate_post', methods=['POST'])
 async def generate_post():
-    # Ищем последний успешно проанализированный файл в analyses
+    # Ищем последний индекс выжимок
     ANALYSES_DIR = os.path.join(os.path.dirname(__file__), 'analyses')
     os.makedirs(ANALYSES_DIR, exist_ok=True)
-    analysis_files = [f for f in os.listdir(ANALYSES_DIR) if f.endswith('.analysis.json')]
-    if not analysis_files:
+    index_files = [f for f in os.listdir(ANALYSES_DIR) if f.endswith('.summaries_index.json')]
+    if not index_files:
         return jsonify({'error': 'Book not analyzed yet'}), 400
-    analysis_files = sorted(analysis_files, key=lambda x: os.path.getctime(os.path.join(ANALYSES_DIR, x)), reverse=True)
-    analysis_path = os.path.join(ANALYSES_DIR, analysis_files[0])
+    index_files = sorted(index_files, key=lambda x: os.path.getctime(os.path.join(ANALYSES_DIR, x)), reverse=True)
+    index_path = os.path.join(ANALYSES_DIR, index_files[0])
     with open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
         keys = json.load(f)
     prompt = (await request.form).get('prompt', 'Сделай пост по материалу книги')
     from tasks import generate_post_task
-    generate_post_task.delay(analysis_path, prompt, keys['gpt_api_key'], keys.get('gpt_model'), keys.get('together_api_key'))
+    generate_post_task.delay(index_path, prompt, keys['gpt_api_key'], keys.get('gpt_model'), keys.get('together_api_key'))
     return jsonify({'status': 'started'})
 
 @app.route('/api/book_analyzer/start_autopost', methods=['POST'])
@@ -684,8 +684,15 @@ async def start_autopost():
     schedule = form.get('schedule')
     with open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
         keys = json.load(f)
+    # Передаём путь к последнему индексному файлу выжимок
+    ANALYSES_DIR = os.path.join(os.path.dirname(__file__), 'analyses')
+    index_files = [f for f in os.listdir(ANALYSES_DIR) if f.endswith('.summaries_index.json')]
+    if not index_files:
+        return jsonify({'error': 'Book not analyzed yet'}), 400
+    index_files = sorted(index_files, key=lambda x: os.path.getctime(os.path.join(ANALYSES_DIR, x)), reverse=True)
+    index_path = os.path.join(ANALYSES_DIR, index_files[0])
     from tasks import autopost_task
-    autopost_task.delay(schedule, keys['telegram_bot_token'], keys.get('chat_id'))
+    autopost_task.delay(schedule, keys['telegram_bot_token'], keys.get('chat_id'), index_path, keys['gpt_api_key'], keys.get('gpt_model'), keys.get('together_api_key'))
     return jsonify({'status': 'started'})
 
 @app.route('/api/book_analyzer/posts_log', methods=['GET'])

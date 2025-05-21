@@ -104,10 +104,10 @@
     </div>
   </div>
   <div class="card mt-4">
-    <div class="card-header">Лог сгенерированных постов</div>
+    <div class="card-header">Главы и выжимки после анализа</div>
     <div class="card-body">
-      <div id="posts-log">
-        <!-- Здесь будет лог постов -->
+      <div id="summaries-list">
+        <span class="text-muted">Нет данных. Проведите анализ книги.</span>
       </div>
     </div>
   </div>
@@ -274,6 +274,7 @@ async function pollAnalyzeStatus() {
             statusDiv.style.display = '';
             statusDiv.className = 'alert alert-success mt-3';
             statusDiv.innerHTML = 'Анализ завершён! <a href="' + (data.result_path ? '/download?file=' + encodeURIComponent(data.result_path) : '#') + '" target="_blank">Скачать результат</a>';
+            loadSummaries(); // обновить список глав
         } else if (data.status === 'error') {
             statusDiv.style.display = '';
             statusDiv.className = 'alert alert-danger mt-3';
@@ -290,5 +291,29 @@ async function pollAnalyzeStatus() {
 
 // Автостарт статуса при загрузке страницы
 pollAnalyzeStatus();
+
+async function loadSummaries() {
+    const listDiv = document.getElementById('summaries-list');
+    listDiv.innerHTML = '<span class="text-muted">Загрузка...</span>';
+    try {
+        const resp = await fetch('/api/book_analyzer/summaries');
+        const data = await resp.json();
+        if (data.status === 'ok' && data.summaries.length) {
+            listDiv.innerHTML = data.summaries.map(s => `
+                <div class="mb-2 p-2 border ${s.used ? 'border-secondary bg-light' : 'border-success'}">
+                  <b>Глава ${s.chapter}:</b> ${s.title} <br>
+                  <span class="badge ${s.used ? 'bg-secondary' : 'bg-success'}">${s.used ? 'Использована' : 'Готова к посту'}</span>
+                </div>
+            `).join('');
+        } else {
+            listDiv.innerHTML = '<span class="text-muted">Нет выжимок. Проведите анализ книги.</span>';
+        }
+    } catch (e) {
+        listDiv.innerHTML = '<span class="text-danger">Ошибка загрузки списка глав</span>';
+    }
+}
+
+// Загружать список выжимок после анализа и при загрузке страницы
+loadSummaries();
 </script>
 {% endblock %} 
