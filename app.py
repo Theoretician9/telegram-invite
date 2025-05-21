@@ -678,10 +678,10 @@ async def generate_post():
 async def start_autopost():
     form = await request.form
     schedule = form.get('schedule')
-    with open('book_analyzer_keys.json', 'r', encoding='utf-8') as f:
+    with open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
         keys = json.load(f)
     from tasks import autopost_task
-    autopost_task.delay(schedule, keys['telegram_bot_token'])
+    autopost_task.delay(schedule, keys['telegram_bot_token'], keys.get('chat_id'))
     return jsonify({'status': 'started'})
 
 @app.route('/api/book_analyzer/posts_log', methods=['GET'])
