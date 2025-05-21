@@ -383,3 +383,41 @@ sudo systemctl reload nginx
 - В случае появления новых ошибок публикации — смотреть логи, где теперь выводится подробная диагностика.
 
 --- 
+
+# Май 2025: Поддержка Together.ai и DeepSeek 67B
+
+## Новые возможности
+- Добавлена поддержка моделей Together.ai, в частности DeepSeek 67B (deepseek-67b-chat).
+- Теперь можно использовать отдельный Together.ai API key для работы с этими моделями.
+- В интерфейсе появился выбор модели DeepSeek 67B и отдельное поле для Together.ai API key.
+
+## Изменения в коде
+- В функцию `analyze_chunk` добавлена ветка для deepseek-67b: если выбрана эта модель, запрос отправляется через Together.ai API (`https://api.together.xyz/v1/chat/completions`).
+- В Celery-задачах `analyze_book_task` и `generate_post_task` теперь поддерживается параметр `together_api_key` и корректная маршрутизация вызова (OpenAI или Together).
+- chunk_size для DeepSeek 67B установлен 32000 символов.
+- Для других моделей логика не изменилась.
+
+## Как использовать
+- Введите Together.ai API key в соответствующее поле.
+- Выберите модель DeepSeek 67B в выпадающем списке.
+- Для анализа и генерации постов будет использоваться Together.ai API.
+
+## Пример запроса к Together.ai
+```
+POST https://api.together.xyz/v1/chat/completions
+Authorization: Bearer <together_api_key>
+{
+  "model": "deepseek-67b-chat",
+  "messages": [
+    {"role": "system", "content": "..."},
+    {"role": "user", "content": "..."}
+  ]
+}
+```
+
+## Важно
+- Для работы DeepSeek 67B обязателен Together.ai API key.
+- Для OpenAI моделей (gpt-3.5, gpt-4o и др.) используется обычный OpenAI API key.
+- Все параметры (ключи, модель) сохраняются в book_analyzer_config.json и автоматически подставляются в задачи анализа и генерации постов.
+
+--- 
