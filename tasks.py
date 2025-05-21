@@ -532,6 +532,11 @@ def autopost_task(self, schedule, telegram_bot_token, chat_id, index_path, gpt_a
     from datetime import datetime, timedelta
     db = SessionLocal()
     try:
+        # Загружаем конфиг с промптами
+        with open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        post_prompt = config.get('post_prompt', 'Автогенерация поста для Telegram-канала.')
+        
         # Загружаем индекс выжимок
         with open(index_path, 'r', encoding='utf-8') as f:
             summaries_index = json.load(f)
@@ -613,7 +618,7 @@ def autopost_task(self, schedule, telegram_bot_token, chat_id, index_path, gpt_a
                         payload = {
                             'model': together_models[gpt_model],
                             'messages': [
-                                {"role": "system", "content": 'Автогенерация поста для Telegram-канала.'},
+                                {"role": "system", "content": post_prompt},
                                 {"role": "user", "content": f"Создай пост по выжимке главы:\n{summary_text}"}
                             ],
                             'temperature': 0.7,
@@ -630,7 +635,7 @@ def autopost_task(self, schedule, telegram_bot_token, chat_id, index_path, gpt_a
                         response = client.chat.completions.create(
                             model=gpt_model or 'gpt-4',
                             messages=[
-                                {"role": "system", "content": 'Автогенерация поста для Telegram-канала.'},
+                                {"role": "system", "content": post_prompt},
                                 {"role": "user", "content": f"Создай пост по выжимке главы:\n{summary_text}"}
                             ]
                         )
@@ -638,7 +643,7 @@ def autopost_task(self, schedule, telegram_bot_token, chat_id, index_path, gpt_a
                     # Сохраняем пост в БД
                     new_post = GeneratedPost(
                         book_filename=os.path.basename(index_path).replace('.summaries_index.json',''),
-                        prompt='Автогенерация',
+                        prompt=post_prompt,  # Сохраняем использованный промпт
                         content=post,
                         published=False,
                         created_at=datetime.utcnow()
