@@ -306,15 +306,19 @@ def split_text_into_chunks(text, chunk_size):
     return chunks
 
 def analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_key=None):
-    if gpt_model == 'falcon-180b':
-        # Together.ai API Falcon 180B
+    together_models = {
+        'deepseek-v3-0324': 'deepseek-ai/deepseek-v3-0324',
+        'llama-4-maverick': 'meta-llama/Llama-4-Maverick-70B-Instruct',
+        'llama-3.3-70b-turbo': 'meta-llama/Meta-Llama-3.3-70B-Instruct-Turbo',
+    }
+    if gpt_model in together_models:
         url = 'https://api.together.xyz/v1/chat/completions'
         headers = {
             'Authorization': f'Bearer {together_api_key}',
             'Content-Type': 'application/json'
         }
         payload = {
-            'model': 'togethercomputer/falcon-180b-chat',
+            'model': together_models[gpt_model],
             'messages': [
                 {"role": "system", "content": analysis_prompt},
                 {"role": "user", "content": chunk}
@@ -322,8 +326,8 @@ def analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_k
         }
         resp = requests.post(url, headers=headers, json=payload, timeout=120)
         if not resp.ok:
-            logging.error(f"Together.ai Falcon 180B error: {resp.status_code} {resp.text}")
-            print(f"Together.ai Falcon 180B error: {resp.status_code} {resp.text}")
+            logging.error(f"Together.ai {gpt_model} error: {resp.status_code} {resp.text}")
+            print(f"Together.ai {gpt_model} error: {resp.status_code} {resp.text}")
         resp.raise_for_status()
         return resp.json()['choices'][0]['message']['content']
     else:
@@ -356,7 +360,7 @@ def analyze_book_task(book_path, additional_prompt, gpt_api_key, gpt_model='gpt-
         chunk_size = 320000
     elif gpt_model == 'gpt-4.1-nano':
         chunk_size = 320000
-    elif gpt_model == 'falcon-180b':
+    elif gpt_model in ['deepseek-v3-0324', 'llama-4-maverick', 'llama-3.3-70b-turbo']:
         chunk_size = 32000
     else:
         chunk_size = 8000
@@ -400,14 +404,19 @@ def generate_post_task(analysis_path, prompt, gpt_api_key, gpt_model=None, toget
         post_prompt += f"\n\nДополнительное задание: {prompt}"
     with open(analysis_path, 'r', encoding='utf-8') as f:
         analysis = f.read()
-    if gpt_model == 'falcon-180b':
+    together_models = {
+        'deepseek-v3-0324': 'deepseek-ai/deepseek-v3-0324',
+        'llama-4-maverick': 'meta-llama/Llama-4-Maverick-70B-Instruct',
+        'llama-3.3-70b-turbo': 'meta-llama/Meta-Llama-3.3-70B-Instruct-Turbo',
+    }
+    if gpt_model in together_models:
         url = 'https://api.together.xyz/v1/chat/completions'
         headers = {
             'Authorization': f'Bearer {together_api_key}',
             'Content-Type': 'application/json'
         }
         payload = {
-            'model': 'togethercomputer/falcon-180b-chat',
+            'model': together_models[gpt_model],
             'messages': [
                 {"role": "system", "content": post_prompt},
                 {"role": "user", "content": f"Создай пост на тему: {prompt}\n\nИспользуй этот анализ книги:\n{analysis}"}
@@ -415,8 +424,8 @@ def generate_post_task(analysis_path, prompt, gpt_api_key, gpt_model=None, toget
         }
         resp = requests.post(url, headers=headers, json=payload, timeout=120)
         if not resp.ok:
-            logging.error(f"Together.ai Falcon 180B error: {resp.status_code} {resp.text}")
-            print(f"Together.ai Falcon 180B error: {resp.status_code} {resp.text}")
+            logging.error(f"Together.ai {gpt_model} error: {resp.status_code} {resp.text}")
+            print(f"Together.ai {gpt_model} error: {resp.status_code} {resp.text}")
         resp.raise_for_status()
         post = resp.json()['choices'][0]['message']['content']
     else:
