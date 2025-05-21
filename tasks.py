@@ -408,16 +408,19 @@ def publish_post_task(post_id, telegram_bot_token, chat_id):
     try:
         post = db.query(GeneratedPost).filter_by(id=post_id).first()
         if not post or post.published:
+            logging.info(f"[TG] Пропуск публикации: post_id={post_id}, уже опубликован или не найден.")
             return
+        logging.info(f"[TG] Публикация поста {post_id} в chat_id={chat_id}, токен={telegram_bot_token[:8]}..., текст: {post.content[:50]}")
         bot = Bot(token=telegram_bot_token)
         try:
-            bot.send_message(chat_id=chat_id, text=post.content, parse_mode='Markdown')
+            result = bot.send_message(chat_id=chat_id, text=post.content, parse_mode='Markdown')
+            logging.info(f"[TG] Успешно опубликовано: message_id={getattr(result, 'message_id', '?')}")
             post.published = True
             post.published_at = datetime.utcnow()
             db.commit()
             redis_client.delete(f'publish_error:{post_id}')
         except Exception as e:
-            logging.error(f"Ошибка публикации поста {post_id} в Telegram: {e}")
+            logging.error(f"[TG] Ошибка публикации поста {post_id} в Telegram: {e}")
             redis_client.set(f'publish_error:{post_id}', str(e))
     finally:
         db.close()
