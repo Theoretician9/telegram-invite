@@ -418,11 +418,11 @@ def publish_post_task(post_id, telegram_bot_token, chat_id, force=False):
         bot = Bot(token=telegram_bot_token)
         try:
             # Проверяем, что бот может получить информацию о чате
-            chat = bot.get_chat(chat_id)
+            chat = bot.get_chat(chat_id=chat_id)
             logging.info(f"[TG] Информация о чате: id={chat.id}, type={chat.type}, title={getattr(chat, 'title', 'N/A')}")
             
             # Проверяем права бота
-            bot_member = chat.get_member(bot.id)
+            bot_member = chat.get_member(user_id=bot.id)
             logging.info(f"[TG] Права бота: can_post_messages={getattr(bot_member, 'can_post_messages', 'N/A')}, can_edit_messages={getattr(bot_member, 'can_edit_messages', 'N/A')}")
             
             # Пробуем отправить сообщение
