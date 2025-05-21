@@ -29,6 +29,11 @@ from telethon.tl.functions.messages import ExportChatInviteRequest
 from telethon.tl.types import InputPhoneContact
 from telegram import Bot
 
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from pytz import timezone as ZoneInfo
+
 # Настройка логгера
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -524,7 +529,6 @@ def publish_post_task(post_id, telegram_bot_token, chat_id, force=False):
 def autopost_task(schedule, telegram_bot_token, chat_id, index_path, gpt_api_key, gpt_model=None, together_api_key=None):
     import time
     import asyncio
-    from datetime import datetime, timedelta
     db = SessionLocal()
     try:
         # Загружаем индекс выжимок
@@ -547,8 +551,9 @@ def autopost_task(schedule, telegram_bot_token, chat_id, index_path, gpt_api_key
         async def autopost_loop():
             from telegram import Bot
             bot = Bot(token=telegram_bot_token)
+            tz = ZoneInfo('Europe/Moscow')
             while True:
-                now = datetime.now()
+                now = datetime.now(tz)
                 # Сортируем слоты на сегодня и завтра
                 slots_today = []
                 slots_tomorrow = []
@@ -561,7 +566,7 @@ def autopost_task(schedule, telegram_bot_token, chat_id, index_path, gpt_api_key
                 # Сначала все оставшиеся на сегодня, потом на завтра
                 for slot_time in sorted(slots_today + slots_tomorrow):
                     # Ждём до наступления времени
-                    now2 = datetime.now()
+                    now2 = datetime.now(tz)
                     wait_sec = (slot_time - now2).total_seconds()
                     if wait_sec > 0:
                         await asyncio.sleep(wait_sec)
@@ -637,7 +642,7 @@ def autopost_task(schedule, telegram_bot_token, chat_id, index_path, gpt_api_key
                     except Exception as e:
                         logging.error(f"[autopost_task] Ошибка публикации: {e}")
                 # После всех слотов ждём до следующего дня
-                now3 = datetime.now()
+                now3 = datetime.now(tz)
                 tomorrow = now3.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
                 await asyncio.sleep((tomorrow - now3).total_seconds())
         asyncio.run(autopost_loop())
