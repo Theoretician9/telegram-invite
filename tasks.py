@@ -417,14 +417,25 @@ def publish_post_task(post_id, telegram_bot_token, chat_id, force=False):
         logging.info(f"[TG] Публикация поста {post_id} в chat_id={chat_id}, токен={telegram_bot_token[:8]}..., текст: {post.content[:50]}")
         bot = Bot(token=telegram_bot_token)
         try:
+            # Проверяем, что бот может получить информацию о чате
+            chat = bot.get_chat(chat_id)
+            logging.info(f"[TG] Информация о чате: id={chat.id}, type={chat.type}, title={getattr(chat, 'title', 'N/A')}")
+            
+            # Проверяем права бота
+            bot_member = chat.get_member(bot.id)
+            logging.info(f"[TG] Права бота: can_post_messages={getattr(bot_member, 'can_post_messages', 'N/A')}, can_edit_messages={getattr(bot_member, 'can_edit_messages', 'N/A')}")
+            
+            # Пробуем отправить сообщение
             result = bot.send_message(chat_id=chat_id, text=post.content, parse_mode='Markdown')
-            logging.info(f"[TG] Успешно опубликовано: message_id={getattr(result, 'message_id', '?')}")
+            logging.info(f"[TG] Успешно опубликовано: message_id={getattr(result, 'message_id', '?')}, chat_id={getattr(result, 'chat', {}).get('id', '?')}")
+            
             post.published = True
             post.published_at = datetime.utcnow()
             db.commit()
             redis_client.delete(f'publish_error:{post_id}')
         except Exception as e:
-            logging.error(f"[TG] Ошибка публикации поста {post_id} в Telegram: {e}")
+            logging.error(f"[TG] Ошибка публикации поста {post_id} в Telegram: {str(e)}")
+            logging.error(f"[TG] Детали ошибки: chat_id={chat_id}, token={telegram_bot_token[:8]}..., content_length={len(post.content)}")
             redis_client.set(f'publish_error:{post_id}', str(e))
     finally:
         db.close()
