@@ -103,6 +103,7 @@
       </form>
     </div>
   </div>
+  <div id="autopost-status"></div>
   <div class="card mt-4">
     <div class="card-header">Главы и выжимки после анализа</div>
     <div class="card-body">
@@ -120,6 +121,16 @@
     </div>
   </div>
 </div>
+<style>
+.chapter-summary-collapsed { cursor:pointer; }
+.chapter-summary-content { display:none; margin-top:8px; }
+.chapter-summary.open .chapter-summary-content { display:block; }
+.chapter-summary.used { background:#23272b; color:#bbb; }
+.chapter-summary .badge { margin-bottom:4px; }
+.post-log-collapsed { cursor:pointer; }
+.post-log-content { display:none; margin-top:8px; }
+.post-log.open .post-log-content { display:block; }
+</style>
 <script>
 document.getElementById('book-form').onsubmit = async function(e) {
     e.preventDefault();
@@ -210,6 +221,11 @@ document.getElementById('autopost-form').onsubmit = async function(e) {
     const formData = new FormData(this);
     const resp = await fetch('/api/book_analyzer/start_autopost', {method: 'POST', body: formData});
     const data = await resp.json();
+    if (data.status === 'started') {
+        document.getElementById('autopost-status').innerHTML = '<div class="alert alert-warning">Автопостинг запущен!</div>';
+    } else {
+        document.getElementById('autopost-status').innerHTML = '';
+    }
     alert(data.status === 'started' ? 'Автопостинг запущен!' : data.error);
 };
 
@@ -218,11 +234,13 @@ async function updatePostsLog() {
     const posts = await resp.json();
     const logDiv = document.getElementById('posts-log');
     logDiv.innerHTML = posts.map(post => `
-        <div class="mb-2 p-2 border ${post.published ? 'border-success' : 'border-secondary'}">
-            <b>${post.published ? '✅' : '🕓'} ${post.created_at}</b><br>
+        <div class="mb-2 p-2 border post-log${post.published ? ' border-success' : ' border-secondary'}" onclick="this.classList.toggle('open')">
+            <div class="post-log-collapsed"><b>${post.published ? '✅' : '🕓'} ${post.created_at}</b><br>
             <span>${post.content.substring(0, 200)}${post.content.length > 200 ? '...' : ''}</span><br>
             <small>Статус: ${post.published ? 'Опубликован' : 'Ожидает'}</small>
-            ${!post.published ? `<button class='btn btn-sm btn-primary mt-2' onclick='publishPost(${post.id})'>Опубликовать</button>` : `<button class='btn btn-sm btn-warning mt-2' onclick='publishPost(${post.id}, true)'>Опубликовать повторно</button>`}
+            ${!post.published ? `<button class='btn btn-sm btn-primary mt-2' onclick='event.stopPropagation();publishPost(${post.id})'>Опубликовать</button>` : `<button class='btn btn-sm btn-warning mt-2' onclick='event.stopPropagation();publishPost(${post.id}, true)'>Опубликовать повторно</button>`}
+            </div>
+            <div class="post-log-content"><pre style="white-space:pre-wrap;">${post.content}</pre></div>
         </div>
     `).join('');
 }
@@ -300,6 +318,23 @@ async function pollAnalyzeStatus() {
 // Автостарт статуса при загрузке страницы
 pollAnalyzeStatus();
 
+function renderSummaryPretty(summary) {
+    if (!summary) return '<span class="text-muted">Нет данных</span>';
+    if (typeof summary === 'string') return `<div>${summary}</div>`;
+    let html = '';
+    if (summary.brief) html += `<div><b>Кратко:</b> ${summary.brief}</div>`;
+    if (summary.key_ideas && Array.isArray(summary.key_ideas)) {
+        html += '<div><b>Ключевые идеи:</b><ul>' + summary.key_ideas.map(i => `<li>${i}</li>`).join('') + '</ul></div>';
+    }
+    if (summary.usefulness) html += `<div><b>Практическая польза:</b> ${summary.usefulness}</div>`;
+    if (summary.practical_application) html += `<div><b>Практическое применение:</b> ${summary.practical_application}</div>`;
+    if (summary.quotes && Array.isArray(summary.quotes)) {
+        html += '<div><b>Цитаты:</b><ul>' + summary.quotes.map(q => `<li>${q}</li>`).join('') + '</ul></div>';
+    }
+    if (!html) html = `<pre>${JSON.stringify(summary, null, 2)}</pre>`;
+    return html;
+}
+
 async function loadSummaries() {
     const listDiv = document.getElementById('summaries-list');
     listDiv.innerHTML = '<span class="text-muted">Загрузка...</span>';
@@ -307,21 +342,22 @@ async function loadSummaries() {
         const resp = await fetch('/api/book_analyzer/summaries');
         const data = await resp.json();
         if (data.status === 'ok' && data.summaries.length) {
-            // Для каждой главы подгружаем summary
             const items = await Promise.all(data.summaries.map(async s => {
-                let summaryText = '';
+                let summaryObj = null;
+                let pretty = '';
                 try {
                     const resp2 = await fetch('/download?file=' + encodeURIComponent(s.summary_path));
                     if (resp2.ok) {
                         const json = await resp2.json();
-                        summaryText = json.summary ? JSON.stringify(json.summary, null, 2) : JSON.stringify(json, null, 2);
+                        summaryObj = json.summary || json;
+                        pretty = renderSummaryPretty(summaryObj);
                     }
-                } catch (e) { summaryText = '[Ошибка загрузки summary]'; }
+                } catch (e) { pretty = '[Ошибка загрузки summary]'; }
                 return `
-                <div class="mb-2 p-2 border ${s.used ? 'border-secondary bg-light' : 'border-success'}">
-                  <b>Глава ${s.chapter}:</b> ${s.title} <br>
-                  <span class="badge ${s.used ? 'bg-secondary' : 'bg-success'}">${s.used ? 'Использована' : 'Готова к посту'}</span>
-                  <pre style="background:#222;color:#bfb;white-space:pre-wrap;max-height:300px;overflow:auto;margin-top:8px;">${summaryText}</pre>
+                <div class="mb-2 p-2 border chapter-summary${s.used ? ' used' : ' border-success'}" onclick="this.classList.toggle('open')">
+                  <div class="chapter-summary-collapsed"><b>Глава ${s.chapter}:</b> ${s.title} <br>
+                  <span class="badge ${s.used ? 'bg-secondary' : 'bg-success'}">${s.used ? 'Использована' : 'Готова к посту'}</span></div>
+                  <div class="chapter-summary-content">${pretty}</div>
                 </div>
                 `;
             }));
