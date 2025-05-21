@@ -166,4 +166,13 @@
 - Все параметры сохраняются в book_analyzer_config.json и автоматически подставляются в задачи.
 - В PROJECT_DOCS.md добавлен подробный раздел о поддержке Together.ai и DeepSeek 67B.
 
+## 2025-05-22: Актуализация поддержки Together.ai моделей
+
+- Исправлены идентификаторы моделей для Together.ai API в tasks.py:
+  - DeepSeek V3 (`deepseek-ai/DeepSeek-V3`)
+  - Llama 4 Maverick 17B 128E Instruct FP8 (`meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8`)
+  - Llama 3.3 70B Instruct Turbo Free (`meta-llama/Llama-3.3-70B-Instruct-Turbo-Free`)
+- В интерфейсе (templates/book_analyzer.html) обновлены описания моделей.
+- Проверено: генерация постов и анализ книг через эти модели работает корректно.
+
 --- 

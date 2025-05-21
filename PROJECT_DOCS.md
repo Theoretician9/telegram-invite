@@ -384,10 +384,19 @@ sudo systemctl reload nginx
 
 --- 
 
-# Май 2025: Обновление поддержки Together.ai моделей
+# Май 2025: Актуализация поддержки Together.ai моделей
 
-## Убрана поддержка
-- Falcon 180B (togethercomputer/falcon-180b-chat) больше не поддерживается, так как модель недоступна через Together.ai API.
+## Новые поддерживаемые модели
+- DeepSeek V3 (`deepseek-ai/DeepSeek-V3`)
+- Llama 4 Maverick 17B 128E Instruct FP8 (`meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8`)
+- Llama 3.3 70B Instruct Turbo Free (`meta-llama/Llama-3.3-70B-Instruct-Turbo-Free`)
+
+## Изменения
+- В tasks.py исправлены идентификаторы моделей для Together.ai API согласно официальной документации.
+- В интерфейсе (templates/book_analyzer.html) обновлены описания моделей, теперь они соответствуют реальным названиям и возможностям.
+- Для всех этих моделей chunk_size установлен 32 000 символов.
+- Для работы требуется отдельный Together.ai API key.
+- После исправлений генерация постов и анализ книг через эти модели работает корректно.
 
 ## Добавлены новые модели
 - **DeepSeek V3-0324** (`deepseek-ai/deepseek-v3-0324`)
