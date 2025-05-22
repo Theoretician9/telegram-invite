@@ -825,8 +825,11 @@ async def autopost_status():
 def reset_tasks():
     """Сброс всех задач и очистка Redis"""
     try:
+        # Используем тот же URL, что и в остальных местах приложения
+        REDIS_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
+        redis_client = redis.Redis.from_url(REDIS_URL)
+        
         # Очищаем все ключи в Redis, связанные с задачами
-        redis_client = redis.Redis.from_url(app.config['CELERY_BROKER_URL'])
         keys = redis_client.keys('*')
         if keys:
             redis_client.delete(*keys)
