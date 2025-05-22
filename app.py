@@ -573,9 +573,9 @@ async def upload_book():
             return jsonify({'status': 'error', 'error': 'Файл не выбран'}), 400
         
         # Проверяем расширение файла
-        if not file.filename.lower().endswith(('.txt', '.pdf')):
+        if not file.filename.lower().endswith(('.txt', '.pdf', '.epub')):
             logging.error(f"Invalid file type: {file.filename}")
-            return jsonify({'status': 'error', 'error': 'Поддерживаются только .txt и .pdf файлы'}), 400
+            return jsonify({'status': 'error', 'error': 'Поддерживаются только .txt, .pdf и .epub файлы'}), 400
         
         # Создаем директорию, если её нет
         os.makedirs(UPLOAD_DIR, exist_ok=True)
