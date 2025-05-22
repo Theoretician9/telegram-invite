@@ -15,6 +15,10 @@ import openai
 import PyPDF2
 import re
 import requests
+import ebooklib
+from ebooklib import epub
+from bs4 import BeautifulSoup
+import html2text
 
 from celery_app import app
 from telethon.sync import TelegramClient
@@ -286,6 +290,23 @@ def bulk_invite_task(self, channel_username, file_path):
         raise
 
 
+def extract_text_from_epub(epub_path):
+    """Извлекает текст из EPUB файла."""
+    book = epub.read_epub(epub_path)
+    h = html2text.HTML2Text()
+    h.ignore_links = True
+    h.ignore_images = True
+    h.ignore_emphasis = True
+    
+    text = ""
+    for item in book.get_items():
+        if item.get_type() == ebooklib.ITEM_DOCUMENT:
+            # Получаем HTML контент
+            content = item.get_content().decode('utf-8')
+            # Конвертируем HTML в текст
+            text += h.handle(content) + "\n\n"
+    return text
+
 def extract_text_from_pdf(pdf_path):
     """Извлекает текст из PDF файла."""
     text = ""
@@ -466,11 +487,16 @@ def analyze_book_task(book_path, additional_prompt, gpt_api_key, gpt_model='gpt-
     analysis_prompt = config['analysis_prompt']
     if additional_prompt:
         analysis_prompt += f"\n\nДополнительное задание: {additional_prompt}"
+    
+    # Определяем формат файла и извлекаем текст
     if book_path.lower().endswith('.pdf'):
         text = extract_text_from_pdf(book_path)
+    elif book_path.lower().endswith('.epub'):
+        text = extract_text_from_epub(book_path)
     else:
         with open(book_path, 'r', encoding='utf-8') as f:
             text = f.read()
+    
     # Разбиваем на смысловые блоки
     blocks = split_text_into_semantic_blocks(text)
     status_key = f"analyze_status:{os.path.basename(book_path)}"
