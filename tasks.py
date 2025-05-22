@@ -20,6 +20,7 @@ from ebooklib import epub
 from bs4 import BeautifulSoup
 import html2text
 import glob
+import warnings
 
 from celery_app import app
 from telethon.sync import TelegramClient
@@ -293,20 +294,33 @@ def bulk_invite_task(self, channel_username, file_path):
 
 def extract_text_from_epub(epub_path):
     """Извлекает текст из EPUB файла."""
-    book = epub.read_epub(epub_path)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        book = epub.read_epub(epub_path, ignore_ncx=True)
+    
     h = html2text.HTML2Text()
     h.ignore_links = True
     h.ignore_images = True
     h.ignore_emphasis = True
+    h.ignore_tables = True
+    h.ignore_anchors = True
     
     text = ""
     for item in book.get_items():
         if item.get_type() == ebooklib.ITEM_DOCUMENT:
-            # Получаем HTML контент
-            content = item.get_content().decode('utf-8')
-            # Конвертируем HTML в текст
-            text += h.handle(content) + "\n\n"
-    return text
+            try:
+                # Получаем HTML контент
+                content = item.get_content().decode('utf-8')
+                # Конвертируем HTML в текст
+                text += h.handle(content) + "\n\n"
+            except Exception as e:
+                logging.warning(f"Error processing EPUB item: {str(e)}")
+                continue
+    
+    # Очищаем текст от лишних пробелов и переносов строк
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = re.sub(r' +', ' ', text)
+    return text.strip()
 
 def extract_text_from_pdf(pdf_path):
     """Извлекает текст из PDF файла."""
