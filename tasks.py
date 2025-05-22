@@ -652,6 +652,32 @@ def publish_post_task(post_id, telegram_bot_token, chat_id, force=False):
             from telegram import Bot
             bot = Bot(token=telegram_bot_token)
             try:
+                # Проверяем доступность бота
+                bot_info = await bot.get_me()
+                logging.info(f"[TG] Бот доступен: {bot_info.username}")
+                
+                # Проверяем доступ к чату
+                try:
+                    chat = await bot.get_chat(chat_id)
+                    logging.info(f"[TG] Чат доступен: {chat.title} (тип: {chat.type})")
+                except Exception as chat_error:
+                    logging.error(f"[TG] Ошибка доступа к чату: {str(chat_error)}")
+                    raise
+                
+                # Пробуем отправить тестовое сообщение
+                try:
+                    test_msg = await bot.send_message(
+                        chat_id=chat_id,
+                        text="Тестовое сообщение для проверки прав бота",
+                        parse_mode='Markdown'
+                    )
+                    await bot.delete_message(chat_id=chat_id, message_id=test_msg.message_id)
+                    logging.info("[TG] Тестовое сообщение успешно отправлено и удалено")
+                except Exception as test_error:
+                    logging.error(f"[TG] Ошибка при отправке тестового сообщения: {str(test_error)}")
+                    raise
+                
+                # Отправляем основной пост
                 result = await bot.send_message(
                     chat_id=chat_id,
                     text=post.content,
@@ -674,6 +700,13 @@ def publish_post_task(post_id, telegram_bot_token, chat_id, force=False):
                     logging.error("[TG] Бот заблокирован в чате.")
                 elif "not enough rights" in error_msg.lower():
                     logging.error("[TG] У бота недостаточно прав для публикации.")
+                elif "bot is not a member" in error_msg.lower():
+                    logging.error("[TG] Бот не является участником чата.")
+                elif "chat is deactivated" in error_msg.lower():
+                    logging.error("[TG] Чат деактивирован.")
+                elif "chat is not accessible" in error_msg.lower():
+                    logging.error("[TG] Чат недоступен.")
+                raise
 
         asyncio.run(send())
     finally:
