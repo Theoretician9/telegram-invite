@@ -398,15 +398,20 @@ def split_text_into_semantic_blocks(text, min_block_size=500, max_block_size=400
         r'^\s*[^\n]+:'
     ]
     
-    # Комбинируем паттерны с флагом MULTILINE
-    combined_pattern = '|'.join(f'(?m){pattern}' for pattern in block_patterns)
+    # Комбинируем паттерны и добавляем флаг MULTILINE в начало
+    combined_pattern = '(?m)' + '|'.join(block_patterns)
     
     for chapter in chapters:
         chapter_text = chapter['text']
         chapter_title = chapter['title']
         
-        # Находим все потенциальные начала блоков
-        block_starts = list(re.finditer(combined_pattern, chapter_text))
+        try:
+            # Находим все потенциальные начала блоков
+            block_starts = list(re.finditer(combined_pattern, chapter_text))
+        except re.error as e:
+            logging.error(f"Regex error in chapter '{chapter_title}': {str(e)}")
+            # Если возникла ошибка с regex, разбиваем по абзацам
+            block_starts = []
         
         if not block_starts:
             # Если не нашли явных разделителей, разбиваем по абзацам
