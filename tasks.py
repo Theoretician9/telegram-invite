@@ -351,80 +351,111 @@ def analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_k
         )
         return response.choices[0].message.content
 
-def split_text_into_semantic_blocks(text, min_block_size=1000, max_block_size=8000):
+def split_text_into_semantic_blocks(text, min_block_size=500, max_block_size=4000):
     """
-    Разбивает текст на смысловые блоки по следующим критериям:
-    1. По абзацам (двойной перенос строки)
-    2. По предложениям (если блок слишком большой)
-    3. По минимальному и максимальному размеру блока
+    Разбивает текст на смысловые блоки, соответствующие структуре промпта:
+    - Отдельная мысль/принцип/подход/практика
+    - Самостоятельный, законченный блок
+    - Включает тему, суть и примеры/применение
     """
     # Сначала разбиваем на главы
     chapters = split_text_into_chapters(text)
     semantic_blocks = []
     
+    # Паттерны для поиска смысловых блоков
+    block_patterns = [
+        # Паттерн для заголовков с цифрами (1., 2., и т.д.)
+        r'(?m)^\s*\d+\.\s*[^\n]+',
+        # Паттерн для заголовков с маркерами (•, -, *, и т.д.)
+        r'(?m)^\s*[•\-*]\s*[^\n]+',
+        # Паттерн для заголовков с подчеркиванием
+        r'(?m)^\s*[^\n]+\n\s*[-=]+\s*$',
+        # Паттерн для заголовков в кавычках
+        r'(?m)^\s*["«][^\n]+["»]',
+        # Паттерн для заголовков с двоеточием
+        r'(?m)^\s*[^\n]+:',
+    ]
+    
+    combined_pattern = '|'.join(block_patterns)
+    
     for chapter in chapters:
         chapter_text = chapter['text']
         chapter_title = chapter['title']
         
-        # Разбиваем на абзацы
-        paragraphs = [p.strip() for p in chapter_text.split('\n\n') if p.strip()]
+        # Находим все потенциальные начала блоков
+        block_starts = list(re.finditer(combined_pattern, chapter_text))
         
-        current_block = []
-        current_size = 0
-        
-        for paragraph in paragraphs:
-            # Если текущий блок + новый абзац превышает максимальный размер
-            if current_size + len(paragraph) > max_block_size and current_block:
-                # Если текущий блок достаточно большой, сохраняем его
-                if current_size >= min_block_size:
-                    block_text = '\n\n'.join(current_block)
-                    semantic_blocks.append({
-                        'title': f"{chapter_title} (часть {len(semantic_blocks) + 1})",
-                        'text': block_text
-                    })
-                    current_block = []
-                    current_size = 0
-                
-                # Если абзац сам по себе больше максимального размера,
-                # разбиваем его на предложения
-                if len(paragraph) > max_block_size:
-                    sentences = re.split(r'(?<=[.!?])\s+', paragraph)
-                    temp_block = []
-                    temp_size = 0
-                    
-                    for sentence in sentences:
-                        if temp_size + len(sentence) > max_block_size and temp_block:
-                            block_text = ' '.join(temp_block)
-                            semantic_blocks.append({
-                                'title': f"{chapter_title} (часть {len(semantic_blocks) + 1})",
-                                'text': block_text
-                            })
-                            temp_block = []
-                            temp_size = 0
-                        
-                        temp_block.append(sentence)
-                        temp_size += len(sentence)
-                    
-                    if temp_block:
-                        block_text = ' '.join(temp_block)
+        if not block_starts:
+            # Если не нашли явных разделителей, разбиваем по абзацам
+            paragraphs = [p.strip() for p in chapter_text.split('\n\n') if p.strip()]
+            current_block = []
+            current_size = 0
+            
+            for paragraph in paragraphs:
+                if current_size + len(paragraph) > max_block_size and current_block:
+                    if current_size >= min_block_size:
+                        block_text = '\n\n'.join(current_block)
                         semantic_blocks.append({
                             'title': f"{chapter_title} (часть {len(semantic_blocks) + 1})",
                             'text': block_text
                         })
-                else:
-                    current_block.append(paragraph)
-                    current_size = len(paragraph)
-            else:
+                    current_block = []
+                    current_size = 0
+                
                 current_block.append(paragraph)
                 current_size += len(paragraph)
-        
-        # Добавляем оставшийся блок, если он достаточно большой
-        if current_block and current_size >= min_block_size:
-            block_text = '\n\n'.join(current_block)
-            semantic_blocks.append({
-                'title': f"{chapter_title} (часть {len(semantic_blocks) + 1})",
-                'text': block_text
-            })
+            
+            if current_block and current_size >= min_block_size:
+                block_text = '\n\n'.join(current_block)
+                semantic_blocks.append({
+                    'title': f"{chapter_title} (часть {len(semantic_blocks) + 1})",
+                    'text': block_text
+                })
+        else:
+            # Разбиваем по найденным разделителям
+            for i, match in enumerate(block_starts):
+                start = match.start()
+                # Определяем конец блока
+                if i < len(block_starts) - 1:
+                    end = block_starts[i + 1].start()
+                else:
+                    end = len(chapter_text)
+                
+                block_text = chapter_text[start:end].strip()
+                
+                # Проверяем размер блока
+                if len(block_text) >= min_block_size:
+                    if len(block_text) > max_block_size:
+                        # Если блок слишком большой, разбиваем его на подблоки
+                        paragraphs = [p.strip() for p in block_text.split('\n\n') if p.strip()]
+                        current_block = []
+                        current_size = 0
+                        
+                        for paragraph in paragraphs:
+                            if current_size + len(paragraph) > max_block_size and current_block:
+                                if current_size >= min_block_size:
+                                    subblock_text = '\n\n'.join(current_block)
+                                    semantic_blocks.append({
+                                        'title': f"{chapter_title} (часть {len(semantic_blocks) + 1})",
+                                        'text': subblock_text
+                                    })
+                                current_block = []
+                                current_size = 0
+                            
+                            current_block.append(paragraph)
+                            current_size += len(paragraph)
+                        
+                        if current_block and current_size >= min_block_size:
+                            subblock_text = '\n\n'.join(current_block)
+                            semantic_blocks.append({
+                                'title': f"{chapter_title} (часть {len(semantic_blocks) + 1})",
+                                'text': subblock_text
+                            })
+                    else:
+                        semantic_blocks.append({
+                            'title': f"{chapter_title} (часть {len(semantic_blocks) + 1})",
+                            'text': block_text
+                        })
     
     return semantic_blocks
 
