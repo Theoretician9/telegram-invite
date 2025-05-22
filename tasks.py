@@ -387,18 +387,19 @@ def split_text_into_semantic_blocks(text, min_block_size=500, max_block_size=400
     # Паттерны для поиска смысловых блоков
     block_patterns = [
         # Паттерн для заголовков с цифрами (1., 2., и т.д.)
-        r'(?m)^\s*\d+\.\s*[^\n]+',
+        r'^\s*\d+\.\s*[^\n]+',
         # Паттерн для заголовков с маркерами (•, -, *, и т.д.)
-        r'(?m)^\s*[•\-*]\s*[^\n]+',
+        r'^\s*[•\-*]\s*[^\n]+',
         # Паттерн для заголовков с подчеркиванием
-        r'(?m)^\s*[^\n]+\n\s*[-=]+\s*$',
+        r'^\s*[^\n]+\n\s*[-=]+\s*$',
         # Паттерн для заголовков в кавычках
-        r'(?m)^\s*["«][^\n]+["»]',
+        r'^\s*["«][^\n]+["»]',
         # Паттерн для заголовков с двоеточием
-        r'(?m)^\s*[^\n]+:',
+        r'^\s*[^\n]+:'
     ]
     
-    combined_pattern = '|'.join(block_patterns)
+    # Комбинируем паттерны с флагом MULTILINE
+    combined_pattern = '|'.join(f'(?m){pattern}' for pattern in block_patterns)
     
     for chapter in chapters:
         chapter_text = chapter['text']
