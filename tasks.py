@@ -19,6 +19,7 @@ import ebooklib
 from ebooklib import epub
 from bs4 import BeautifulSoup
 import html2text
+import glob
 
 from celery_app import app
 from telethon.sync import TelegramClient
@@ -660,10 +661,11 @@ def publish_post_task(post_id, telegram_bot_token, chat_id, force=False):
 
 
 @app.task(bind=True)
-def autopost_task(self, schedule, telegram_bot_token, chat_id, index_path, gpt_api_key, gpt_model=None, together_api_key=None):
+def autopost_task(self, schedule, telegram_bot_token, chat_id, index_path, gpt_api_key, gpt_model=None, together_api_key=None, random_blocks=False):
     import time
     import asyncio
     from datetime import datetime, timedelta
+    import random
     db = SessionLocal()
     try:
         # Загружаем конфиг с промптами
@@ -671,9 +673,24 @@ def autopost_task(self, schedule, telegram_bot_token, chat_id, index_path, gpt_a
             config = json.load(f)
         post_prompt = config.get('post_prompt', 'Автогенерация поста для Telegram-канала.')
         
-        # Загружаем индекс выжимок
-        with open(index_path, 'r', encoding='utf-8') as f:
-            summaries_index = json.load(f)
+        # Загружаем все доступные индексы
+        analyses_dir = os.path.join(os.path.dirname(__file__), 'analyses')
+        all_index_files = sorted(glob.glob(os.path.join(analyses_dir, '*.summaries_index.json')), key=os.path.getmtime, reverse=True)
+        
+        # Собираем все неиспользованные блоки из всех книг
+        all_blocks = []
+        for idx_path in all_index_files:
+            with open(idx_path, 'r', encoding='utf-8') as f:
+                book_blocks = json.load(f)
+                for block in book_blocks:
+                    if not block.get('used'):
+                        block['index_path'] = idx_path  # Сохраняем путь к индексу для обновления
+                        all_blocks.append(block)
+        
+        if not all_blocks:
+            logging.info('[autopost_task] Все блоки использованы, автопостинг завершён.')
+            return
+        
         times = [s.strip() for s in schedule.split(',') if s.strip()]
         logging.info(f"[autopost_task] Старт задачи. Moscow now: {datetime.now(ZoneInfo('Europe/Moscow'))}. Schedule: {times}")
         # Преобразуем времена в список (часы, минуты)
@@ -685,11 +702,13 @@ def autopost_task(self, schedule, telegram_bot_token, chat_id, index_path, gpt_a
             except Exception:
                 logging.error(f"[autopost_task] Ошибка парсинга времени: {t}")
                 continue
+        
         together_models = {
             'deepseek-v3-0324': 'deepseek-ai/DeepSeek-V3',
             'llama-4-maverick': 'meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8',
             'llama-3.3-70b-turbo': 'meta-llama/Llama-3.3-70B-Instruct-Turbo-Free',
         }
+        
         async def autopost_loop():
             from telegram import Bot
             bot = Bot(token=telegram_bot_token)
@@ -697,13 +716,16 @@ def autopost_task(self, schedule, telegram_bot_token, chat_id, index_path, gpt_a
             REDIS_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
             redis_client = redis.Redis.from_url(REDIS_URL)
             stop_key = f'autopost_stop:{self.request.id}'
+            
             while True:
                 # Проверка флага остановки
                 if redis_client.get(stop_key):
                     logging.info(f"[autopost_task] Получен сигнал остановки (stop_key={stop_key}), задача завершена.")
                     return
+                
                 now = datetime.now(tz)
                 logging.info(f"[autopost_task] Новый цикл. Moscow now: {now}")
+                
                 # Сортируем слоты на сегодня и завтра
                 slots_today = []
                 slots_tomorrow = []
@@ -713,16 +735,20 @@ def autopost_task(self, schedule, telegram_bot_token, chat_id, index_path, gpt_a
                         slots_today.append(slot_time)
                     else:
                         slots_tomorrow.append(slot_time + timedelta(days=1))
+                
                 all_slots = sorted(slots_today + slots_tomorrow)
                 logging.info(f"[autopost_task] Слоты на публикацию: {[s.strftime('%Y-%m-%d %H:%M') for s in all_slots]}")
+                
                 for slot_time in all_slots:
                     # Проверка флага остановки перед каждым слотом
                     if redis_client.get(stop_key):
                         logging.info(f"[autopost_task] Получен сигнал остановки (stop_key={stop_key}), задача завершена.")
                         return
+                    
                     now2 = datetime.now(tz)
                     wait_sec = (slot_time - now2).total_seconds()
                     logging.info(f"[autopost_task] Ждём до {slot_time.strftime('%Y-%m-%d %H:%M')} (через {wait_sec:.1f} сек). Moscow now: {now2}")
+                    
                     if wait_sec > 0:
                         # Проверка флага остановки во время ожидания
                         for _ in range(int(wait_sec // 5)):
@@ -733,14 +759,23 @@ def autopost_task(self, schedule, telegram_bot_token, chat_id, index_path, gpt_a
                         remain = wait_sec % 5
                         if remain > 0:
                             await asyncio.sleep(remain)
-                    # Берём первую неиспользованную выжимку
-                    summary_item = next((s for s in summaries_index if not s.get('used')), None)
-                    if not summary_item:
-                        logging.info('[autopost_task] Все выжимки использованы, автопостинг завершён.')
+                    
+                    # Выбираем блок для поста
+                    if not all_blocks:
+                        logging.info('[autopost_task] Все блоки использованы, автопостинг завершён.')
                         return
-                    with open(summary_item['summary_path'], 'r', encoding='utf-8') as f:
+                    
+                    if random_blocks:
+                        # Случайный выбор блока
+                        block = random.choice(all_blocks)
+                    else:
+                        # Последовательный выбор блока
+                        block = all_blocks[0]
+                    
+                    with open(block['summary_path'], 'r', encoding='utf-8') as f:
                         summary_data = json.load(f)
                     summary_text = json.dumps(summary_data['summary'], ensure_ascii=False, indent=2)
+                    
                     # Генерируем пост
                     post = None
                     if gpt_model in together_models:
@@ -774,22 +809,31 @@ def autopost_task(self, schedule, telegram_bot_token, chat_id, index_path, gpt_a
                             ]
                         )
                         post = response.choices[0].message.content
+                    
                     # Сохраняем пост в БД
                     new_post = GeneratedPost(
-                        book_filename=os.path.basename(index_path).replace('.summaries_index.json',''),
-                        prompt=post_prompt,  # Сохраняем использованный промпт
+                        book_filename=os.path.basename(block['index_path']).replace('.summaries_index.json',''),
+                        prompt=post_prompt,
                         content=post,
                         published=False,
                         created_at=datetime.utcnow()
                     )
                     db.add(new_post)
                     db.commit()
-                    # Помечаем выжимку как использованную
-                    for s in summaries_index:
-                        if s['chapter'] == summary_item['chapter']:
-                            s['used'] = True
-                    with open(index_path, 'w', encoding='utf-8') as f:
-                        json.dump(summaries_index, f, ensure_ascii=False, indent=2)
+                    
+                    # Помечаем блок как использованный
+                    with open(block['index_path'], 'r', encoding='utf-8') as f:
+                        book_blocks = json.load(f)
+                        for b in book_blocks:
+                            if b['chapter'] == block['chapter'] and b['title'] == block['title']:
+                                b['used'] = True
+                                break
+                    with open(block['index_path'], 'w', encoding='utf-8') as f:
+                        json.dump(book_blocks, f, ensure_ascii=False, indent=2)
+                    
+                    # Удаляем использованный блок из списка
+                    all_blocks.remove(block)
+                    
                     # Публикуем пост
                     try:
                         result = await bot.send_message(
@@ -804,10 +848,12 @@ def autopost_task(self, schedule, telegram_bot_token, chat_id, index_path, gpt_a
                         db.commit()
                     except Exception as e:
                         logging.error(f"[autopost_task] Ошибка публикации: {e}")
+                
                 # После всех слотов ждём до следующего дня
                 now3 = datetime.now(tz)
                 tomorrow = now3.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
                 logging.info(f"[autopost_task] Все слоты на сегодня обработаны. Ждём до завтра: {tomorrow.strftime('%Y-%m-%d %H:%M')}")
+                
                 # Проверка флага остановки во время ожидания до завтра
                 wait_to_tomorrow = (tomorrow - now3).total_seconds()
                 for _ in range(int(wait_to_tomorrow // 5)):
@@ -818,6 +864,7 @@ def autopost_task(self, schedule, telegram_bot_token, chat_id, index_path, gpt_a
                 remain = wait_to_tomorrow % 5
                 if remain > 0:
                     await asyncio.sleep(remain)
+        
         asyncio.run(autopost_loop())
     finally:
         db.close()
