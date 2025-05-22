@@ -11,3 +11,6 @@ cryptg>=0.4.0
 qrcode>=7.4.2
 pillow>=10.0.0
 python-dotenv>=1.0.0
+ebooklib==0.18
+beautifulsoup4==4.12.2
+html2text==2020.1.16
