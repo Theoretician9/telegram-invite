@@ -680,30 +680,37 @@ async def generate_post():
 
 @app.route('/api/book_analyzer/start_autopost', methods=['POST'])
 async def start_autopost():
-    form = await request.form
-    schedule = form.get('schedule')
-    with open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
-        keys = json.load(f)
-    # Передаём путь к последнему индексному файлу выжимок
-    ANALYSES_DIR = os.path.join(os.path.dirname(__file__), 'analyses')
-    index_files = [f for f in os.listdir(ANALYSES_DIR) if f.endswith('.summaries_index.json')]
-    if not index_files:
-        return jsonify({'error': 'Book not analyzed yet'}), 400
-    index_files = sorted(index_files, key=lambda x: os.path.getctime(os.path.join(ANALYSES_DIR, x)), reverse=True)
-    index_path = os.path.join(ANALYSES_DIR, index_files[0])
-    from tasks import autopost_task
-    # Останавливаем предыдущую задачу, если есть
-    REDIS_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
-    redis_client = redis.Redis.from_url(REDIS_URL)
-    prev_task_id = redis_client.get('autopost_task_id')
-    if prev_task_id:
-        redis_client.set(f'autopost_stop:{prev_task_id.decode()}', '1')
-    # Запускаем новую задачу
-    result = autopost_task.delay(schedule, keys['telegram_bot_token'], keys.get('chat_id'), index_path, keys['gpt_api_key'], keys.get('gpt_model'), keys.get('together_api_key'))
-    redis_client.set('autopost_task_id', result.id)
-    # Сохраняем статус автопостинга в Redis
-    redis_client.hset('autopost_status', mapping={'active': '1', 'schedule': schedule})
-    return jsonify({'status': 'started'})
+    try:
+        form = await request.form
+        schedule = form.get('schedule')
+        random_blocks = form.get('random_blocks') == 'on'
+        
+        # Читаем конфиг
+        with open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        
+        gpt_model = config.get('gpt_model', 'gpt-3.5-turbo')
+        together_api_key = config.get('together_api_key')
+        gpt_api_key = config.get('gpt_api_key')
+        telegram_bot_token = config.get('telegram_bot_token')
+        chat_id = config.get('chat_id')
+        
+        # Получаем последний индекс
+        analyses_dir = os.path.join(os.path.dirname(__file__), 'analyses')
+        index_files = sorted(glob.glob(os.path.join(analyses_dir, '*.summaries_index.json')), key=os.path.getmtime, reverse=True)
+        if not index_files:
+            return jsonify({'error': 'Нет проанализированных книг'}), 400
+        
+        index_path = index_files[0]
+        
+        # Запускаем задачу
+        from tasks import autopost_task
+        task = autopost_task.delay(schedule, telegram_bot_token, chat_id, index_path, gpt_api_key, gpt_model, together_api_key, random_blocks)
+        
+        return jsonify({'status': 'started', 'task_id': task.id})
+    except Exception as e:
+        logging.error(f"Error in start_autopost: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/book_analyzer/posts_log', methods=['GET'])
 async def posts_log():
