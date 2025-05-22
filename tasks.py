@@ -351,6 +351,83 @@ def analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_k
         )
         return response.choices[0].message.content
 
+def split_text_into_semantic_blocks(text, min_block_size=1000, max_block_size=8000):
+    """
+    Разбивает текст на смысловые блоки по следующим критериям:
+    1. По абзацам (двойной перенос строки)
+    2. По предложениям (если блок слишком большой)
+    3. По минимальному и максимальному размеру блока
+    """
+    # Сначала разбиваем на главы
+    chapters = split_text_into_chapters(text)
+    semantic_blocks = []
+    
+    for chapter in chapters:
+        chapter_text = chapter['text']
+        chapter_title = chapter['title']
+        
+        # Разбиваем на абзацы
+        paragraphs = [p.strip() for p in chapter_text.split('\n\n') if p.strip()]
+        
+        current_block = []
+        current_size = 0
+        
+        for paragraph in paragraphs:
+            # Если текущий блок + новый абзац превышает максимальный размер
+            if current_size + len(paragraph) > max_block_size and current_block:
+                # Если текущий блок достаточно большой, сохраняем его
+                if current_size >= min_block_size:
+                    block_text = '\n\n'.join(current_block)
+                    semantic_blocks.append({
+                        'title': f"{chapter_title} (часть {len(semantic_blocks) + 1})",
+                        'text': block_text
+                    })
+                    current_block = []
+                    current_size = 0
+                
+                # Если абзац сам по себе больше максимального размера,
+                # разбиваем его на предложения
+                if len(paragraph) > max_block_size:
+                    sentences = re.split(r'(?<=[.!?])\s+', paragraph)
+                    temp_block = []
+                    temp_size = 0
+                    
+                    for sentence in sentences:
+                        if temp_size + len(sentence) > max_block_size and temp_block:
+                            block_text = ' '.join(temp_block)
+                            semantic_blocks.append({
+                                'title': f"{chapter_title} (часть {len(semantic_blocks) + 1})",
+                                'text': block_text
+                            })
+                            temp_block = []
+                            temp_size = 0
+                        
+                        temp_block.append(sentence)
+                        temp_size += len(sentence)
+                    
+                    if temp_block:
+                        block_text = ' '.join(temp_block)
+                        semantic_blocks.append({
+                            'title': f"{chapter_title} (часть {len(semantic_blocks) + 1})",
+                            'text': block_text
+                        })
+                else:
+                    current_block.append(paragraph)
+                    current_size = len(paragraph)
+            else:
+                current_block.append(paragraph)
+                current_size += len(paragraph)
+        
+        # Добавляем оставшийся блок, если он достаточно большой
+        if current_block and current_size >= min_block_size:
+            block_text = '\n\n'.join(current_block)
+            semantic_blocks.append({
+                'title': f"{chapter_title} (часть {len(semantic_blocks) + 1})",
+                'text': block_text
+            })
+    
+    return semantic_blocks
+
 @app.task
 def analyze_book_task(book_path, additional_prompt, gpt_api_key, gpt_model='gpt-3.5-turbo-1106', together_api_key=None):
     with open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
@@ -363,21 +440,21 @@ def analyze_book_task(book_path, additional_prompt, gpt_api_key, gpt_model='gpt-
     else:
         with open(book_path, 'r', encoding='utf-8') as f:
             text = f.read()
-    # Разбиваем на главы
-    chapters = split_text_into_chapters(text)
+    # Разбиваем на смысловые блоки
+    blocks = split_text_into_semantic_blocks(text)
     status_key = f"analyze_status:{os.path.basename(book_path)}"
-    redis_client.hmset(status_key, {"status": "started", "progress": 0, "total": len(chapters)})
+    redis_client.hmset(status_key, {"status": "started", "progress": 0, "total": len(blocks)})
     summaries_index = []
     try:
-        for i, chapter in enumerate(chapters):
-            chunk = chapter['text']
-            title = chapter['title']
+        for i, block in enumerate(blocks):
+            chunk = block['text']
+            title = block['title']
             analysis = analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_key)
             try:
                 analysis_json = json.loads(analysis)
             except json.JSONDecodeError:
                 analysis_json = {"raw_analysis": analysis}
-            summary_filename = f"{os.path.basename(book_path)}_chapter_{i+1}.summary.json"
+            summary_filename = f"{os.path.basename(book_path)}_block_{i+1}.summary.json"
             summary_path = os.path.join(ANALYSES_DIR, summary_filename)
             with open(summary_path, 'w', encoding='utf-8') as f:
                 json.dump({"title": title, "summary": analysis_json}, f, ensure_ascii=False, indent=2)
@@ -387,13 +464,13 @@ def analyze_book_task(book_path, additional_prompt, gpt_api_key, gpt_model='gpt-
                 "summary_path": summary_path,
                 "used": False
             })
-            redis_client.hmset(status_key, {"status": "in_progress", "progress": i+1, "total": len(chapters)})
-        # Сохраняем индекс глав
+            redis_client.hmset(status_key, {"status": "in_progress", "progress": i+1, "total": len(blocks)})
+        # Сохраняем индекс блоков
         index_filename = os.path.basename(book_path) + '.summaries_index.json'
         index_path = os.path.join(ANALYSES_DIR, index_filename)
         with open(index_path, 'w', encoding='utf-8') as f:
             json.dump(summaries_index, f, ensure_ascii=False, indent=2)
-        redis_client.hmset(status_key, {"status": "done", "progress": len(chapters), "total": len(chapters), "result_path": index_path})
+        redis_client.hmset(status_key, {"status": "done", "progress": len(blocks), "total": len(blocks), "result_path": index_path})
         return index_path
     except Exception as e:
         redis_client.hmset(status_key, {"status": "error", "error": str(e)})
