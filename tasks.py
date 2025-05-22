@@ -296,7 +296,11 @@ def extract_text_from_epub(epub_path):
     """Извлекает текст из EPUB файла."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        book = epub.read_epub(epub_path, ignore_ncx=True)
+        try:
+            book = epub.read_epub(epub_path)
+        except Exception as e:
+            logging.error(f"Error reading EPUB file: {str(e)}")
+            raise
     
     h = html2text.HTML2Text()
     h.ignore_links = True
