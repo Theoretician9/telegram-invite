@@ -821,6 +821,41 @@ async def autopost_status():
     result = {k.decode(): v.decode() for k, v in status.items()}
     return jsonify({'active': result.get('active') == '1', 'schedule': result.get('schedule', '')})
 
+@app.route('/reset_tasks', methods=['POST'])
+def reset_tasks():
+    """Сброс всех задач и очистка Redis"""
+    try:
+        # Очищаем все ключи в Redis, связанные с задачами
+        redis_client = redis.Redis.from_url(app.config['CELERY_BROKER_URL'])
+        keys = redis_client.keys('*')
+        if keys:
+            redis_client.delete(*keys)
+        
+        # Очищаем все ключи с префиксом analyze_status
+        status_keys = redis_client.keys('analyze_status:*')
+        if status_keys:
+            redis_client.delete(*status_keys)
+        
+        # Очищаем все ключи с префиксом autopost_stop
+        stop_keys = redis_client.keys('autopost_stop:*')
+        if stop_keys:
+            redis_client.delete(*stop_keys)
+        
+        # Очищаем все ключи с префиксом publish_error
+        error_keys = redis_client.keys('publish_error:*')
+        if error_keys:
+            redis_client.delete(*error_keys)
+        
+        # Очищаем все ключи с префиксом bulk_invite_status
+        invite_keys = redis_client.keys('bulk_invite_status:*')
+        if invite_keys:
+            redis_client.delete(*invite_keys)
+        
+        return jsonify({'status': 'success', 'message': 'Все задачи сброшены'})
+    except Exception as e:
+        logging.error(f"Error resetting tasks: {str(e)}")
+        return jsonify({'status': 'error', 'error': str(e)}), 500
+
 if __name__ == '__main__':
     import hypercorn.asyncio
     import hypercorn.config

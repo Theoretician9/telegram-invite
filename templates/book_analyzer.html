@@ -78,6 +78,9 @@
    - Связь с современностью
    - Личный взгляд на материал</textarea>
         </div>
+        <div class="mb-3">
+          <button type="button" class="btn btn-danger" id="resetTasks">Сбросить все задачи</button>
+        </div>
         <button type="submit" class="btn btn-secondary">Сохранить</button>
       </form>
       <hr>
@@ -400,5 +403,26 @@ async function loadAutopostStatus() {
 
 // При загрузке страницы
 loadAutopostStatus();
+
+// Добавляем обработчик для кнопки сброса
+document.getElementById('resetTasks').addEventListener('click', function() {
+    if (confirm('Вы уверены, что хотите сбросить все задачи? Это действие нельзя отменить.')) {
+        fetch('/reset_tasks', {
+            method: 'POST',
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                alert('Все задачи успешно сброшены');
+                location.reload();
+            } else {
+                alert('Ошибка при сбросе задач: ' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('Ошибка при сбросе задач: ' + error);
+        });
+    }
+});
 </script>
 {% endblock %} 
