@@ -17,12 +17,14 @@ def create_app(config_class=Config):
     
     # Загружаем конфигурацию
     app.config.from_object(config_class)
+    config_class.init_app(app)
     
     # Устанавливаем дополнительные настройки
-    app.config['PROVIDE_AUTOMATIC_OPTIONS'] = False
-    app.config['SESSION_TYPE'] = 'redis'
-    app.config['SESSION_REDIS'] = aioredis.from_url(BROKER_URL)
-    app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 МБ
+    app.config.update(
+        SESSION_TYPE='redis',
+        SESSION_REDIS=aioredis.from_url(os.getenv('CELERY_BROKER_URL', 'redis://redis:6379/0')),
+        MAX_CONTENT_LENGTH=100 * 1024 * 1024  # 100 МБ
+    )
     Session(app)
     
     # Регистрируем blueprints

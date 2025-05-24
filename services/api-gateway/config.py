@@ -26,4 +26,10 @@ class Config:
     PROVIDE_AUTOMATIC_OPTIONS = False
     JSON_AS_ASCII = False
     JSONIFY_PRETTYPRINT_REGULAR = True
-    JSONIFY_MIMETYPE = 'application/json' 
+    JSONIFY_MIMETYPE = 'application/json'
+    
+    @classmethod
+    def init_app(cls, app):
+        app.config['PROVIDE_AUTOMATIC_OPTIONS'] = False
+
+    # ... (rest of the original file content remains unchanged) 
