@@ -6,19 +6,15 @@ from routes.autopost import autopost_bp
 from config import Config
 
 def create_app(config_class=Config):
-    # Создаем приложение
-    app = Quart(__name__)
+    # Создаем приложение с минимальной конфигурацией
+    app = Quart(
+        __name__,
+        static_folder='static',
+        template_folder='templates'
+    )
     
     # Загружаем конфигурацию
     app.config.from_object(config_class)
-    
-    # Устанавливаем дополнительные настройки
-    app.config.update(
-        PROVIDE_AUTOMATIC_OPTIONS=False,
-        JSON_AS_ASCII=False,
-        JSONIFY_PRETTYPRINT_REGULAR=True,
-        JSONIFY_MIMETYPE='application/json'
-    )
     
     # Регистрируем blueprints
     app.register_blueprint(invite_bp, url_prefix='/api/invite')
