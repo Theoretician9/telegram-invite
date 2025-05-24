@@ -12,4 +12,6 @@ class Config:
     CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://redis:6379/0")
     TELEGRAM_API_ID = os.getenv("TELEGRAM_API_ID")
     TELEGRAM_API_HASH = os.getenv("TELEGRAM_API_HASH")
-    PROVIDE_AUTOMATIC_OPTIONS = True 
+    PROVIDE_AUTOMATIC_OPTIONS = True
+    STATIC_FOLDER = 'static'
+    TEMPLATE_FOLDER = 'templates' 
