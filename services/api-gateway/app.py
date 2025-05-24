@@ -1,7 +1,7 @@
 from quart import Quart
-from routes.invite import invite_bp
-from routes.parser import parser_bp
-from routes.autopost import autopost_bp
+from services.api_gateway.routes.invite import invite_bp
+from services.api_gateway.routes.parser import parser_bp
+from services.api_gateway.routes.autopost import autopost_bp
 
 app = Quart(__name__)
 app.config['PROVIDE_AUTOMATIC_OPTIONS'] = True

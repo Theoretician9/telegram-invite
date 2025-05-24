@@ -10,4 +10,4 @@ timezone = 'UTC'
 enable_utc = True
 
 # Импортируем все задачи
-imports = ('tasks.invite',) 
+imports = ('services.api_gateway.tasks.invite',) 
