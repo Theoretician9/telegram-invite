@@ -2,7 +2,8 @@ from celery import Celery
 import os
 from services.api_gateway.models.invite import InviteLog
 
-celery = Celery('tasks', broker=os.getenv('CELERY_BROKER_URL', 'redis://redis:6379/0'))
+celery = Celery('tasks')
+celery.config_from_object('celeryconfig')
 
 @celery.task
 def process_invite(target: str, message: str):
