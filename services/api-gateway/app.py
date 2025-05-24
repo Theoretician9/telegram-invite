@@ -6,11 +6,13 @@ from routes.autopost import autopost_bp
 from config import Config
 
 def create_app():
-    app = Quart(__name__, 
-                static_folder='static',
-                template_folder='templates')
+    # Создаем приложение с минимальной конфигурацией
+    app = Quart(__name__)
     
-    # Устанавливаем конфигурацию напрямую
+    # Устанавливаем базовые настройки
+    app.config['PROVIDE_AUTOMATIC_OPTIONS'] = False
+    
+    # Устанавливаем остальную конфигурацию
     app.config.update(
         SECRET_KEY=Config.SECRET_KEY,
         SQLALCHEMY_DATABASE_URI=Config.SQLALCHEMY_DATABASE_URI,
@@ -19,11 +21,10 @@ def create_app():
         CELERY_BROKER_URL=Config.CELERY_BROKER_URL,
         CELERY_RESULT_BACKEND=Config.CELERY_RESULT_BACKEND,
         TELEGRAM_API_ID=Config.TELEGRAM_API_ID,
-        TELEGRAM_API_HASH=Config.TELEGRAM_API_HASH
+        TELEGRAM_API_HASH=Config.TELEGRAM_API_HASH,
+        STATIC_FOLDER='static',
+        TEMPLATE_FOLDER='templates'
     )
-    
-    # Отключаем автоматические опции
-    app.config['PROVIDE_AUTOMATIC_OPTIONS'] = False
     
     # Регистрируем blueprints
     app.register_blueprint(invite_bp, url_prefix='/api/invite')
