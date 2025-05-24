@@ -38,6 +38,30 @@
 - Telegram Bot API (python-telegram-bot 22.x+)
 - Telegram Client API (Telethon)
 
+### 4. Парсинг пользователей
+- Парсинг пользователей из каналов и групп
+- Поддержка различных источников:
+  - Публичные каналы
+  - Приватные каналы (с доступом)
+  - Группы (с доступом)
+- Экспорт результатов в CSV
+- Фильтрация по активности
+- Сохранение истории парсинга
+- Автоматическое обновление данных
+- Защита от ограничений API
+
+### 5. Вебхуки и интеграции
+- Прием вебхуков от Telegram
+- Обработка событий:
+  - Новые участники
+  - Выход участников
+  - Сообщения
+  - Редактирования
+- Интеграция с внешними сервисами
+- Автоматические действия по событиям
+- Логирование всех вебхуков
+- Валидация подписи вебхуков
+
 ## Технический стек
 - Backend: Python (Quart + Hypercorn)
 - Frontend: HTML, JavaScript, Bootstrap 5
@@ -66,7 +90,22 @@
     "mysql_database": "telegram_invite",
     "session_secret": "your-secret-key",
     "admin_username": "admin",
-    "admin_password": "hashed-password"
+    "admin_password": "hashed-password",
+    "webhook_secret": "your-webhook-secret",
+    "webhook_url": "https://your-domain.com/api/webhook/telegram",
+    "parser_delay": 2,
+    "parser_batch_size": 100,
+    "parser_max_retries": 3,
+    "webhook_actions": {
+        "new_member": {
+            "enabled": true,
+            "actions": ["welcome_message", "add_to_database"]
+        },
+        "left_member": {
+            "enabled": true,
+            "actions": ["remove_from_database"]
+        }
+    }
 }
 ```
 
@@ -145,6 +184,55 @@ class GeneratedPost(Base):
     error = Column(Text)
 ```
 
+### ParseTask
+```python
+class ParseTask(Base):
+    __tablename__ = 'parse_tasks'
+    
+    id = Column(Integer, primary_key=True)
+    task_id = Column(String(255), nullable=False)
+    source_url = Column(String(255), nullable=False)
+    source_type = Column(String(50), nullable=False)
+    status = Column(String(50), nullable=False)
+    progress = Column(Integer, default=0)
+    total_users = Column(Integer, default=0)
+    parsed_users = Column(Integer, default=0)
+    filters = Column(JSON)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime)
+    error = Column(Text)
+```
+
+### WebhookEvent
+```python
+class WebhookEvent(Base):
+    __tablename__ = 'webhook_events'
+    
+    id = Column(Integer, primary_key=True)
+    event_type = Column(String(50), nullable=False)
+    source = Column(String(255), nullable=False)
+    data = Column(JSON, nullable=False)
+    processed = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    processed_at = Column(DateTime)
+    error = Column(Text)
+```
+
+### WebhookAction
+```python
+class WebhookAction(Base):
+    __tablename__ = 'webhook_actions'
+    
+    id = Column(Integer, primary_key=True)
+    event_type = Column(String(50), nullable=False)
+    action_type = Column(String(50), nullable=False)
+    config = Column(JSON, nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_triggered = Column(DateTime)
+    error = Column(Text)
+```
+
 ## API Endpoints
 
 ### Приглашения
@@ -187,6 +275,33 @@ class GeneratedPost(Base):
 - POST /api/accounts/update
   - Параметры: account_id, name, is_active
   - Возвращает: status
+
+### Парсинг пользователей
+- POST /api/parser/start
+  - Параметры: source_url, source_type, filters
+  - Возвращает: task_id, status
+- GET /api/parser/status
+  - Параметры: task_id
+  - Возвращает: progress, status, stats
+- GET /api/parser/download
+  - Параметры: task_id
+  - Возвращает: CSV файл
+- GET /api/parser/history
+  - Параметры: date_from, date_to
+  - Возвращает: список задач парсинга
+
+### Вебхуки
+- POST /api/webhook/telegram
+  - Обрабатывает вебхуки от Telegram
+  - Валидирует подпись
+  - Сохраняет события
+- GET /api/webhook/events
+  - Параметры: type, date_from, date_to
+  - Возвращает: список событий
+- POST /api/webhook/actions
+  - Настройка автоматических действий
+  - Параметры: event_type, action_type, config
+  - Возвращает: action_id
 
 ## Безопасность
 - Аутентификация через сессии в Redis
@@ -255,4 +370,12 @@ class GeneratedPost(Base):
 - Мониторинг ошибок и автоматические повторные попытки
 - Регулярное обновление зависимостей
 - Проверка логов на наличие проблем
-- Настройка алертов при критических ошибках 
+- Настройка алертов при критических ошибках
+- Соблюдение лимитов парсинга (не более 200 пользователей в час)
+- Защита вебхуков от подделки
+- Мониторинг нагрузки при парсинге
+- Регулярная очистка старых вебхуков
+- Настройка фильтров для парсинга
+- Проверка валидности вебхуков
+- Обработка ошибок парсинга
+- Логирование действий вебхуков 
