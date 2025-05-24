@@ -375,11 +375,12 @@ def analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_k
             resp = requests.post('https://api.openai.com/v1/chat/completions', 
                                headers=headers, json=data)
         else:
-            # Маппинг моделей Together.xyz (используем только доступные модели)
+            # Маппинг моделей Together.xyz (каждая модель указывает на себя)
             together_models = {
-                'deepseek-v3-0324': 'mistralai/Mistral-7B-Instruct-v0.2',
-                'llama-4-maverick': 'mistralai/Mistral-7B-Instruct-v0.2',
-                'llama-3.3-70b-turbo': 'mistralai/Mistral-7B-Instruct-v0.2'
+                'deepseek-v3-0324': 'deepseek-ai/deepseek-coder-33b-instruct',
+                'llama-4-maverick': 'meta-llama/Llama-2-70b-chat-hf',
+                'llama-3.3-70b-turbo': 'meta-llama/Llama-2-70b-chat-hf',
+                'mistral-7b-instruct': 'mistralai/Mistral-7B-Instruct-v0.2'
             }
             
             headers = {
