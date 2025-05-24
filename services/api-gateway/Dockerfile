@@ -14,8 +14,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Set Python path
+# Set environment variables
 ENV PYTHONPATH=/app
+ENV QUART_PROVIDE_AUTOMATIC_OPTIONS=true
 
 # Run the application
 CMD ["hypercorn", "app:app", "--bind", "0.0.0.0:8000"] 

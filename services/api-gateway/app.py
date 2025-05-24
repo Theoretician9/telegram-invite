@@ -1,8 +1,12 @@
+import os
 from quart import Quart
 from routes.invite import invite_bp
 from routes.parser import parser_bp
 from routes.autopost import autopost_bp
 from config import Config
+
+# Устанавливаем переменные окружения перед созданием приложения
+os.environ['QUART_PROVIDE_AUTOMATIC_OPTIONS'] = 'true'
 
 def create_app():
     app = Quart(__name__)
