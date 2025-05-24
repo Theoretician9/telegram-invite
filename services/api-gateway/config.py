@@ -8,7 +8,6 @@ class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key")
     STATIC_FOLDER = 'static'
     TEMPLATE_FOLDER = 'templates'
-    INSTANCE_RELATIVE_CONFIG = True
     
     # Настройки базы данных
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "mysql+pymysql://user:password@mysql:3306/telegram_invite")
