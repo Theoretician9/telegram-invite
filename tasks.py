@@ -411,37 +411,45 @@ def analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_k
             logging.info(f"Sending request to Together.xyz with model: {model_name}")
             logging.info(f"Request data: {json.dumps(data, indent=2)}")
             
-            resp = requests.post('https://api.together.xyz/v1/completions', 
-                               headers=headers, json=data, timeout=120)
-            
-            if not resp.ok:
-                logging.error(f"Together.xyz API error: {resp.status_code}")
-                logging.error(f"Response text: {resp.text}")
-                logging.error(f"Request data: {json.dumps(data, indent=2)}")
-                raise requests.exceptions.HTTPError(f"Together.xyz API error: {resp.status_code} - {resp.text}")
+            try:
+                resp = requests.post('https://api.together.xyz/v1/completions', 
+                                   headers=headers, json=data, timeout=120)
+                
+                if not resp.ok:
+                    logging.error(f"Together.xyz API error: {resp.status_code}")
+                    logging.error(f"Response text: {resp.text}")
+                    logging.error(f"Request data: {json.dumps(data, indent=2)}")
+                    raise requests.exceptions.HTTPError(f"Together.xyz API error: {resp.status_code} - {resp.text}")
+                
+                # Проверяем на ошибку превышения лимита запросов
+                if resp.status_code == 429:
+                    logging.warning("Rate limit exceeded, waiting 60 seconds before retry...")
+                    time.sleep(60)  # Ждем минуту перед повторной попыткой
+                    return analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_key)
+                
+                result = resp.json()
+                return result['choices'][0]['text'].strip()
+                
+            except requests.exceptions.RequestException as e:
+                logging.error(f"Request error: {str(e)}")
+                if hasattr(e, 'response') and e.response is not None:
+                    logging.error(f"Response status: {e.response.status_code}")
+                    logging.error(f"Response text: {e.response.text}")
+                raise
         
-        # Проверяем на ошибку превышения лимита запросов
-        if resp.status_code == 429:
-            logging.warning("Rate limit exceeded, waiting 60 seconds before retry...")
-            time.sleep(60)  # Ждем минуту перед повторной попыткой
-            return analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_key)
-            
+        # Для GPT-4
         resp.raise_for_status()
         result = resp.json()
-        
-        if gpt_model == 'gpt-4':
-            return result['choices'][0]['message']['content']
-        else:
-            # Для Together.xyz формат ответа другой
-            return result['choices'][0]['text'].strip()
+        return result['choices'][0]['message']['content']
             
     except requests.exceptions.HTTPError as e:
-        if e.response.status_code == 429:
+        if hasattr(e, 'response') and e.response is not None and e.response.status_code == 429:
             logging.warning("Rate limit exceeded, waiting 60 seconds before retry...")
             time.sleep(60)  # Ждем минуту перед повторной попыткой
             return analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_key)
         logging.error(f"HTTP Error: {str(e)}")
-        logging.error(f"Request details: URL={e.response.url}, Status={e.response.status_code}, Response={e.response.text}")
+        if hasattr(e, 'response') and e.response is not None:
+            logging.error(f"Request details: URL={e.response.url}, Status={e.response.status_code}, Response={e.response.text}")
         raise
     except Exception as e:
         logging.error(f"Error analyzing chunk: {str(e)}")
