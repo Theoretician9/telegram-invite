@@ -7,19 +7,23 @@ from config import Config
 import aioredis
 from flask_session import Session
 
+# Создаем базовую конфигурацию
+default_config = {
+    'PROVIDE_AUTOMATIC_OPTIONS': False,
+    'SESSION_TYPE': 'redis',
+    'SESSION_REDIS': aioredis.from_url(os.getenv('CELERY_BROKER_URL', 'redis://redis:6379/0')),
+    'MAX_CONTENT_LENGTH': 100 * 1024 * 1024,  # 100 МБ
+    'static_folder': 'static',
+    'template_folder': 'templates'
+}
+
 def create_app(config_class=Config):
-    # Создаем базовую конфигурацию
-    config = {
-        'PROVIDE_AUTOMATIC_OPTIONS': False,
-        'SESSION_TYPE': 'redis',
-        'SESSION_REDIS': aioredis.from_url(os.getenv('CELERY_BROKER_URL', 'redis://redis:6379/0')),
-        'MAX_CONTENT_LENGTH': 100 * 1024 * 1024,  # 100 МБ
-        'static_folder': 'static',
-        'template_folder': 'templates'
-    }
+    # Создаем приложение
+    app = Quart(__name__)
     
-    # Создаем приложение с конфигурацией
-    app = Quart(__name__, **config)
+    # Устанавливаем конфигурацию
+    for key, value in default_config.items():
+        app.config[key] = value
     
     # Загружаем остальную конфигурацию
     app.config.from_object(config_class)
