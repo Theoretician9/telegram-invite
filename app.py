@@ -49,7 +49,7 @@ DB_URL = os.getenv('DB_URL') or 'mysql+pymysql://telegraminvi:QyA9fWbh56Ln@127.0
 engine = create_engine(DB_URL)
 SessionLocal = sessionmaker(bind=engine)
 
-# --- Flask app init ---
+# --- Quart app init ---
 app = Quart(__name__)
 app.config['SESSION_TYPE'] = 'redis'
 app.config['SESSION_REDIS'] = aioredis.from_url(BROKER_URL)
