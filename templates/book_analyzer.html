@@ -97,6 +97,7 @@
       <form id="generate-form" method="post" action="/api/book_analyzer/generate_post">
         <button type="submit" class="btn btn-info">Сгенерировать пост</button>
       </form>
+      <button id="reset-used" class="btn btn-secondary mt-2">Сбросить использованные выжимки</button>
       <hr>
       <form id="autopost-form" method="post" action="/api/book_analyzer/start_autopost">
         <div class="mb-3">
@@ -435,5 +436,23 @@ document.getElementById('resetTasks').addEventListener('click', function() {
         });
     }
 });
+
+document.getElementById('reset-used').onclick = async function() {
+    if (!confirm('Сбросить флаги использованных выжимок? Это позволит повторно использовать все выжимки для генерации постов.')) {
+        return;
+    }
+    try {
+        const resp = await fetch('/api/book_analyzer/reset_used', {method: 'POST'});
+        const data = await resp.json();
+        if (data.status === 'ok') {
+            alert('Флаги успешно сброшены!');
+        } else {
+            alert('Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Ошибка при сбросе флагов: ' + error.message);
+    }
+};
 </script>
 {% endblock %} 
