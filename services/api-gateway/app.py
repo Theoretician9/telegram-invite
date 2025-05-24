@@ -1,15 +1,15 @@
 from quart import Quart
-from quart_cors import cors
-from config import Config
+from routes.invite import invite_bp
+from routes.parser import parser_bp
+from routes.autopost import autopost_bp
 
-# Create Quart application
 app = Quart(__name__)
-app.config.from_object(Config)
-app = cors(app, allow_origin=["*"])
+app.config['PROVIDE_AUTOMATIC_OPTIONS'] = True
 
-# Import and register blueprints
-from routes import register_routes
-register_routes(app)
+# Регистрируем blueprints
+app.register_blueprint(invite_bp, url_prefix='/api/invite')
+app.register_blueprint(parser_bp, url_prefix='/api/parser')
+app.register_blueprint(autopost_bp, url_prefix='/api/autopost')
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000) 
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8000) 
