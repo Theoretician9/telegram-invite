@@ -1,14 +1,15 @@
 from celery import Celery
-import os
-from ..models.invite import InviteLog
+from models.invite import InviteLog
 
-celery = Celery('tasks')
-celery.config_from_object('celeryconfig')
+# Настройка Celery
+celery = Celery('tasks', broker='redis://redis:6379/0')
 
 @celery.task
-def process_invite(target: str, message: str):
+def process_invite(target, message=None):
     try:
-        # Здесь будет логика отправки приглашений
-        return {"status": "success", "message": "Invite processed"}
+        # Здесь будет логика обработки приглашения
+        log = InviteLog(target=target, message=message)
+        # TODO: Добавить сохранение в базу данных
+        return {'status': 'success', 'target': target}
     except Exception as e:
-        return {"status": "error", "message": str(e)} 
+        return {'status': 'error', 'error': str(e)} 
