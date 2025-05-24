@@ -16,6 +16,9 @@ def create_app(config_class=Config):
     # Загружаем конфигурацию
     app.config.from_object(config_class)
     
+    # Устанавливаем дополнительные настройки
+    app.config['PROVIDE_AUTOMATIC_OPTIONS'] = False
+    
     # Регистрируем blueprints
     app.register_blueprint(invite_bp, url_prefix='/api/invite')
     app.register_blueprint(parser_bp, url_prefix='/api/parser')
