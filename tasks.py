@@ -1064,8 +1064,8 @@ def autopost_task(self, schedule, telegram_bot_token, chat_id, index_path, gpt_a
     finally:
         db.close()
 
-@app.route('/reset_tasks', methods=['POST'])
-def reset_tasks():
+def reset_all_tasks():
+    """Сбрасывает все текущие задачи анализа и автопостинга."""
     try:
         # Получаем все ключи статусов анализа
         analyze_keys = redis_client.keys('analyze_status:*')
@@ -1085,6 +1085,7 @@ def reset_tasks():
         redis_client.delete(*analyze_keys)
         redis_client.delete(*autopost_keys)
         
-        return jsonify({"status": "success"})
+        return True
     except Exception as e:
-        return jsonify({"status": "error", "error": str(e)})
+        logging.error(f"Error resetting tasks: {str(e)}")
+        return False

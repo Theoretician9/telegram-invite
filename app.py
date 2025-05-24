@@ -5,7 +5,7 @@ import asyncio
 from datetime import datetime, timedelta
 import redis
 import mysql.connector
-from tasks import invite_task
+from tasks import invite_task, analyze_book_task, generate_post_task, publish_post_task, autopost_task, reset_all_tasks
 from alerts import send_alert
 from parser import parse_group_with_account
 import uuid
@@ -657,7 +657,6 @@ async def analyze_book():
     if not books:
         return jsonify({'error': 'No book uploaded'}), 400
     book_path = os.path.join(UPLOAD_DIR, books[0])
-    from tasks import analyze_book_task
     analyze_book_task.delay(book_path, prompt, gpt_api_key, gpt_model, together_api_key)
     return jsonify({'status': 'started'})
 
@@ -674,7 +673,6 @@ async def generate_post():
     with open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
         keys = json.load(f)
     prompt = (await request.form).get('prompt', 'Сделай пост по материалу книги')
-    from tasks import generate_post_task
     generate_post_task.delay(index_path, prompt, keys['gpt_api_key'], keys.get('gpt_model'), keys.get('together_api_key'))
     return jsonify({'status': 'started'})
 
@@ -704,8 +702,7 @@ async def start_autopost():
         index_path = index_files[0]
         
         # Запускаем задачу
-        from tasks import autopost_task
-        task = autopost_task.delay(schedule, telegram_bot_token, chat_id, index_path, gpt_api_key, gpt_model, together_api_key, random_blocks)
+        autopost_task.delay(schedule, telegram_bot_token, chat_id, index_path, gpt_api_key, gpt_model, together_api_key, random_blocks)
         
         return jsonify({'status': 'started', 'task_id': task.id})
     except Exception as e:
@@ -777,7 +774,6 @@ async def publish_post():
             return jsonify({'error': 'Already published'}), 400
         with open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
             config = json.load(f)
-        from tasks import publish_post_task
         publish_post_task.delay(post_id, config['telegram_bot_token'], config.get('chat_id'), force)
         return jsonify({'status': 'ok'})
     finally:
@@ -823,41 +819,14 @@ async def autopost_status():
 
 @app.route('/reset_tasks', methods=['POST'])
 def reset_tasks():
-    """Сброс всех задач и очистка Redis"""
+    """Сбрасывает все текущие задачи анализа и автопостинга."""
     try:
-        # Используем тот же URL, что и в остальных местах приложения
-        REDIS_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
-        redis_client = redis.Redis.from_url(REDIS_URL)
-        
-        # Очищаем все ключи в Redis, связанные с задачами
-        keys = redis_client.keys('*')
-        if keys:
-            redis_client.delete(*keys)
-        
-        # Очищаем все ключи с префиксом analyze_status
-        status_keys = redis_client.keys('analyze_status:*')
-        if status_keys:
-            redis_client.delete(*status_keys)
-        
-        # Очищаем все ключи с префиксом autopost_stop
-        stop_keys = redis_client.keys('autopost_stop:*')
-        if stop_keys:
-            redis_client.delete(*stop_keys)
-        
-        # Очищаем все ключи с префиксом publish_error
-        error_keys = redis_client.keys('publish_error:*')
-        if error_keys:
-            redis_client.delete(*error_keys)
-        
-        # Очищаем все ключи с префиксом bulk_invite_status
-        invite_keys = redis_client.keys('bulk_invite_status:*')
-        if invite_keys:
-            redis_client.delete(*invite_keys)
-        
-        return jsonify({'status': 'success', 'message': 'Все задачи сброшены'})
+        if reset_all_tasks():
+            return jsonify({"status": "success"})
+        else:
+            return jsonify({"status": "error", "error": "Failed to reset tasks"})
     except Exception as e:
-        logging.error(f"Error resetting tasks: {str(e)}")
-        return jsonify({'status': 'error', 'error': str(e)}), 500
+        return jsonify({"status": "error", "error": str(e)})
 
 if __name__ == '__main__':
     import hypercorn.asyncio
