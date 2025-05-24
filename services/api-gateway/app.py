@@ -8,23 +8,24 @@ import aioredis
 from flask_session import Session
 
 def create_app(config_class=Config):
-    # Создаем приложение с минимальной конфигурацией
-    app = Quart(
-        __name__,
-        static_folder='static',
-        template_folder='templates'
-    )
+    # Создаем базовую конфигурацию
+    config = {
+        'PROVIDE_AUTOMATIC_OPTIONS': False,
+        'SESSION_TYPE': 'redis',
+        'SESSION_REDIS': aioredis.from_url(os.getenv('CELERY_BROKER_URL', 'redis://redis:6379/0')),
+        'MAX_CONTENT_LENGTH': 100 * 1024 * 1024,  # 100 МБ
+        'static_folder': 'static',
+        'template_folder': 'templates'
+    }
     
-    # Загружаем конфигурацию
+    # Создаем приложение с конфигурацией
+    app = Quart(__name__, **config)
+    
+    # Загружаем остальную конфигурацию
     app.config.from_object(config_class)
     config_class.init_app(app)
     
-    # Устанавливаем дополнительные настройки
-    app.config.update(
-        SESSION_TYPE='redis',
-        SESSION_REDIS=aioredis.from_url(os.getenv('CELERY_BROKER_URL', 'redis://redis:6379/0')),
-        MAX_CONTENT_LENGTH=100 * 1024 * 1024  # 100 МБ
-    )
+    # Инициализируем сессии
     Session(app)
     
     # Регистрируем blueprints
