@@ -546,7 +546,25 @@ def analyze_book_task(book_path, additional_prompt, gpt_api_key, gpt_model='gpt-
     blocks = split_text_into_semantic_blocks(text)
     status_key = f"analyze_status:{os.path.basename(book_path)}"
     redis_client.hmset(status_key, {"status": "started", "progress": 0, "total": len(blocks)})
+    
+    # Проверяем существующий индекс
+    index_filename = os.path.basename(book_path) + '.summaries_index.json'
+    index_path = os.path.join(ANALYSES_DIR, index_filename)
     summaries_index = []
+    
+    if os.path.exists(index_path):
+        try:
+            with open(index_path, 'r', encoding='utf-8') as f:
+                summaries_index = json.load(f)
+            # Получаем список уже проанализированных глав
+            analyzed_chapters = {s['chapter'] for s in summaries_index}
+            # Фильтруем блоки, оставляя только неанализированные
+            blocks = [b for i, b in enumerate(blocks) if i+1 not in analyzed_chapters]
+            logging.info(f"Resuming analysis from chapter {len(summaries_index) + 1}")
+        except Exception as e:
+            logging.error(f"Error reading existing index: {str(e)}")
+            summaries_index = []
+    
     try:
         for i, block in enumerate(blocks):
             chunk = block['text']
@@ -556,23 +574,42 @@ def analyze_book_task(book_path, additional_prompt, gpt_api_key, gpt_model='gpt-
                 analysis_json = json.loads(analysis)
             except json.JSONDecodeError:
                 analysis_json = {"raw_analysis": analysis}
-            summary_filename = f"{os.path.basename(book_path)}_block_{i+1}.summary.json"
+            
+            # Сохраняем результат анализа
+            chapter_num = len(summaries_index) + 1
+            summary_filename = f"{os.path.basename(book_path)}_block_{chapter_num}.summary.json"
             summary_path = os.path.join(ANALYSES_DIR, summary_filename)
+            
             with open(summary_path, 'w', encoding='utf-8') as f:
                 json.dump({"title": title, "summary": analysis_json}, f, ensure_ascii=False, indent=2)
+            
+            # Добавляем в индекс
             summaries_index.append({
-                "chapter": i+1,
+                "chapter": chapter_num,
                 "title": title,
                 "summary_path": summary_path,
                 "used": False
             })
-            redis_client.hmset(status_key, {"status": "in_progress", "progress": i+1, "total": len(blocks)})
-        # Сохраняем индекс блоков
-        index_filename = os.path.basename(book_path) + '.summaries_index.json'
-        index_path = os.path.join(ANALYSES_DIR, index_filename)
-        with open(index_path, 'w', encoding='utf-8') as f:
-            json.dump(summaries_index, f, ensure_ascii=False, indent=2)
-        redis_client.hmset(status_key, {"status": "done", "progress": len(blocks), "total": len(blocks), "result_path": index_path})
+            
+            # Сохраняем индекс после каждого блока
+            with open(index_path, 'w', encoding='utf-8') as f:
+                json.dump(summaries_index, f, ensure_ascii=False, indent=2)
+            
+            # Обновляем статус
+            redis_client.hmset(status_key, {
+                "status": "in_progress", 
+                "progress": len(summaries_index), 
+                "total": len(blocks) + len(summaries_index),
+                "result_path": index_path
+            })
+            
+        # Финальное обновление статуса
+        redis_client.hmset(status_key, {
+            "status": "done", 
+            "progress": len(summaries_index), 
+            "total": len(summaries_index),
+            "result_path": index_path
+        })
         return index_path
     except Exception as e:
         redis_client.hmset(status_key, {"status": "error", "error": str(e)})
