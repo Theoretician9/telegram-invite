@@ -1,5 +1,5 @@
 [Unit]
-Description=Telegram Inviter Flask Service
+Description=Telegram Inviter Quart Service
 After=network.target
 
 [Service]
@@ -10,7 +10,7 @@ Environment="PATH=/home/admin/telegram_invite/venv/bin"
 Environment="ADMIN_USERNAME=admin"
 Environment="ADMIN_PASSWORD=admin"
 Environment="FLASK_SECRET=3d6f45a5fc12445dbac2f59c7b6c1cf1"
-ExecStart=/home/admin/telegram_invite/venv/bin/hypercorn app:app --bind 0.0.0.0:5000
+ExecStart=/home/admin/telegram_invite/venv/bin/hypercorn app:app --bind 0.0.0.0:8000
 Restart=always
 
 [Install]

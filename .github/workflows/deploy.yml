@@ -3,60 +3,24 @@ name: Deploy to Production
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    name: Deploy
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-
-      - name: Debug SSH secrets
-        run: |
-          echo "HOST='${{ secrets.SERVER_HOST }}'"
-          echo "PORT='${{ secrets.SERVER_SSH_PORT }}'"
-          echo "USER='${{ secrets.SERVER_USER }}'"
-        shell: bash
-
-      - name: Copy to server & deploy
-        uses: appleboy/ssh-action@v0.1.9
+      - uses: actions/checkout@v2
+      
+      - name: Deploy to server
+        uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SERVER_SSH_PORT }}
-          sync: false
+          key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            set -e
-
-            # Backend
-            cd ~/telegram_invite
-            git fetch origin main
-            git reset --hard origin/main
+            cd /home/admin/telegram_invite
+            git pull
             source venv/bin/activate
             pip install -r requirements.txt
-
-            # Nginx config
-            sudo cp deploy/nginx/telegram_invite.conf /etc/nginx/sites-available/telegram_invite
-            sudo ln -sf /etc/nginx/sites-available/telegram_invite /etc/nginx/sites-enabled/telegram_invite
-
-            # Restart services
-            sudo systemctl restart telegram_inviter_celery.service
-            sudo systemctl restart telegram_inviter_flask.service
-
-            # Frontend build
-            cd frontend
-            npm ci
-            npm run build
-
-            # Reload Nginx
-            sudo systemctl reload nginx
+            sudo systemctl restart telegram_inviter_quart.service
+            sudo systemctl restart nginx
