@@ -402,16 +402,23 @@ def analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_k
                 'prompt': prompt,
                 'temperature': 0.7,
                 'max_tokens': 1000,
+                'top_p': 0.7,
+                'top_k': 50,
+                'repetition_penalty': 1.1,
                 'stop': ['</s>', '[INST]']
             }
             
             logging.info(f"Sending request to Together.xyz with model: {model_name}")
+            logging.info(f"Request data: {json.dumps(data, indent=2)}")
+            
             resp = requests.post('https://api.together.xyz/v1/completions', 
                                headers=headers, json=data, timeout=120)
             
             if not resp.ok:
-                logging.error(f"Together.xyz API error: {resp.status_code} {resp.text}")
+                logging.error(f"Together.xyz API error: {resp.status_code}")
+                logging.error(f"Response text: {resp.text}")
                 logging.error(f"Request data: {json.dumps(data, indent=2)}")
+                raise requests.exceptions.HTTPError(f"Together.xyz API error: {resp.status_code} - {resp.text}")
         
         # Проверяем на ошибку превышения лимита запросов
         if resp.status_code == 429:
