@@ -353,43 +353,63 @@ def split_text_into_chapters(text):
                 chapters.append({'title': 'Вступление', 'text': part})
     return [ch for ch in chapters if ch['text'].strip()]
 
-def analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_key=None):
-    together_models = {
-        'deepseek-v3-0324': 'deepseek-ai/DeepSeek-V3',
-        'llama-4-maverick': 'meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8',
-        'llama-3.3-70b-turbo': 'meta-llama/Llama-3.3-70B-Instruct-Turbo-Free',
-    }
-    if gpt_model in together_models:
-        url = 'https://api.together.xyz/v1/chat/completions'
-        headers = {
-            'Authorization': f'Bearer {together_api_key}',
-            'Content-Type': 'application/json'
-        }
-        payload = {
-            'model': together_models[gpt_model],
-            'messages': [
-                {"role": "system", "content": analysis_prompt},
-                {"role": "user", "content": chunk}
-            ],
-            'temperature': 0.7,
-            'max_tokens': 4096
-        }
-        resp = requests.post(url, headers=headers, json=payload, timeout=120)
-        if not resp.ok:
-            logging.error(f"Together.ai {gpt_model} error: {resp.status_code} {resp.text}")
-            print(f"Together.ai {gpt_model} error: {resp.status_code} {resp.text}")
+def analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_key):
+    """Анализирует часть текста с помощью GPT."""
+    try:
+        # Добавляем задержку между запросами
+        time.sleep(2)  # 2 секунды между запросами
+        
+        if gpt_model == 'gpt-4':
+            headers = {
+                'Authorization': f'Bearer {gpt_api_key}',
+                'Content-Type': 'application/json'
+            }
+            data = {
+                'model': gpt_model,
+                'messages': [
+                    {'role': 'system', 'content': analysis_prompt},
+                    {'role': 'user', 'content': chunk}
+                ],
+                'temperature': 0.7
+            }
+            resp = requests.post('https://api.openai.com/v1/chat/completions', 
+                               headers=headers, json=data)
+        else:
+            headers = {
+                'Authorization': f'Bearer {together_api_key}',
+                'Content-Type': 'application/json'
+            }
+            data = {
+                'model': gpt_model,
+                'messages': [
+                    {'role': 'system', 'content': analysis_prompt},
+                    {'role': 'user', 'content': chunk}
+                ],
+                'temperature': 0.7,
+                'max_tokens': 1000
+            }
+            resp = requests.post('https://api.together.xyz/v1/chat/completions', 
+                               headers=headers, json=data)
+        
+        # Проверяем на ошибку превышения лимита запросов
+        if resp.status_code == 429:
+            logging.warning("Rate limit exceeded, waiting 60 seconds before retry...")
+            time.sleep(60)  # Ждем минуту перед повторной попыткой
+            return analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_key)
+            
         resp.raise_for_status()
-        return resp.json()['choices'][0]['message']['content']
-    else:
-        client = openai.OpenAI(api_key=gpt_api_key)
-        response = client.chat.completions.create(
-            model=gpt_model,
-            messages=[
-                {"role": "system", "content": analysis_prompt},
-                {"role": "user", "content": chunk}
-            ]
-        )
-        return response.choices[0].message.content
+        result = resp.json()
+        return result['choices'][0]['message']['content']
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 429:
+            logging.warning("Rate limit exceeded, waiting 60 seconds before retry...")
+            time.sleep(60)  # Ждем минуту перед повторной попыткой
+            return analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_key)
+        logging.error(f"HTTP Error: {str(e)}")
+        raise
+    except Exception as e:
+        logging.error(f"Error analyzing chunk: {str(e)}")
+        raise
 
 def split_text_into_semantic_blocks(text, min_block_size=500, max_block_size=4000):
     """
