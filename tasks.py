@@ -377,9 +377,9 @@ def analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_k
         else:
             # Маппинг моделей Together.xyz (каждая модель указывает на себя)
             together_models = {
-                'deepseek-v3-0324': 'deepseek-ai/deepseek-coder-33b-instruct-v1.5',
-                'llama-4-maverick': 'meta-llama/Llama-2-70b-chat-hf',
-                'llama-3.3-70b-turbo': 'meta-llama/Llama-2-70b-chat-hf',
+                'deepseek-v3-0324': 'deepseek-ai/DeepSeek-V3',
+                'llama-4-maverick': 'meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8',
+                'llama-3.3-70b-turbo': 'meta-llama/Llama-3.3-70B-Instruct-Turbo-Free',
                 'mistral-7b-instruct': 'mistralai/Mistral-7B-Instruct-v0.2'
             }
             
@@ -680,6 +680,7 @@ def generate_post_task(index_path, prompt, gpt_api_key, gpt_model=None, together
         'deepseek-v3-0324': 'deepseek-ai/DeepSeek-V3',
         'llama-4-maverick': 'meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8',
         'llama-3.3-70b-turbo': 'meta-llama/Llama-3.3-70B-Instruct-Turbo-Free',
+        'mistral-7b-instruct': 'mistralai/Mistral-7B-Instruct-v0.2'
     }
     if gpt_model in together_models:
         url = 'https://api.together.xyz/v1/chat/completions'
