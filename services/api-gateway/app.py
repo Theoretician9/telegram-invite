@@ -19,9 +19,11 @@ def create_app():
         CELERY_BROKER_URL=Config.CELERY_BROKER_URL,
         CELERY_RESULT_BACKEND=Config.CELERY_RESULT_BACKEND,
         TELEGRAM_API_ID=Config.TELEGRAM_API_ID,
-        TELEGRAM_API_HASH=Config.TELEGRAM_API_HASH,
-        PROVIDE_AUTOMATIC_OPTIONS=True
+        TELEGRAM_API_HASH=Config.TELEGRAM_API_HASH
     )
+    
+    # Отключаем автоматические опции
+    app.config['PROVIDE_AUTOMATIC_OPTIONS'] = False
     
     # Регистрируем blueprints
     app.register_blueprint(invite_bp, url_prefix='/api/invite')
