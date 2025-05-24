@@ -19,4 +19,4 @@ ENV PYTHONPATH=/app
 ENV QUART_PROVIDE_AUTOMATIC_OPTIONS=true
 
 # Run the application
-CMD ["hypercorn", "app:app", "--bind", "0.0.0.0:8000"] 
+CMD ["hypercorn", "wsgi:app", "--bind", "0.0.0.0:8000"] 
