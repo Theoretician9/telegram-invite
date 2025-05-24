@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, DateTime, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 
@@ -8,18 +8,12 @@ class InviteLog(Base):
     __tablename__ = "invite_logs"
 
     id = Column(Integer, primary_key=True)
-    task_id = Column(String(36), unique=True, nullable=False)
     target = Column(String(255), nullable=False)
-    message = Column(String(4096), nullable=False)
-    status = Column(String(20), nullable=False, default="pending")
-    progress = Column(Integer, default=0)
-    total = Column(Integer, default=0)
-    success = Column(Integer, default=0)
-    failed = Column(Integer, default=0)
-    error = Column(String(1024))
-    metadata = Column(JSON)
+    message = Column(String(1000))
+    status = Column(String(50), default="pending")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_active = Column(Boolean, default=True)
 
     @classmethod
     async def get_by_task_id(cls, task_id: str):
