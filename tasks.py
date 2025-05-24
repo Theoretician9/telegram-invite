@@ -390,18 +390,28 @@ def analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_k
             # Получаем правильное имя модели
             model_name = together_models.get(gpt_model, gpt_model)
             
+            # Формируем промпт в формате Together.xyz
+            prompt = f"""<s>[INST] <<SYS>>
+{analysis_prompt}
+<</SYS>>
+
+{chunk} [/INST]"""
+            
             data = {
                 'model': model_name,
-                'messages': [
-                    {'role': 'system', 'content': analysis_prompt},
-                    {'role': 'user', 'content': chunk}
-                ],
+                'prompt': prompt,
                 'temperature': 0.7,
-                'max_tokens': 1000
+                'max_tokens': 1000,
+                'stop': ['</s>', '[INST]']
             }
             
-            resp = requests.post('https://api.together.xyz/v1/chat/completions', 
+            logging.info(f"Sending request to Together.xyz with model: {model_name}")
+            resp = requests.post('https://api.together.xyz/v1/completions', 
                                headers=headers, json=data, timeout=120)
+            
+            if not resp.ok:
+                logging.error(f"Together.xyz API error: {resp.status_code} {resp.text}")
+                logging.error(f"Request data: {json.dumps(data, indent=2)}")
         
         # Проверяем на ошибку превышения лимита запросов
         if resp.status_code == 429:
@@ -411,7 +421,13 @@ def analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_k
             
         resp.raise_for_status()
         result = resp.json()
-        return result['choices'][0]['message']['content']
+        
+        if gpt_model == 'gpt-4':
+            return result['choices'][0]['message']['content']
+        else:
+            # Для Together.xyz формат ответа другой
+            return result['choices'][0]['text'].strip()
+            
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 429:
             logging.warning("Rate limit exceeded, waiting 60 seconds before retry...")
