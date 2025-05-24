@@ -7,39 +7,28 @@ const api = axios.create({
 export interface AutopostRequest {
   target: string;
   message: string;
-  interval: number;
-  enabled: boolean;
+  interval: string;
 }
 
 export interface AutopostStatus {
   task_id: string;
-  status: string;
-  enabled: boolean;
-  interval: number;
-  last_post_at: string;
-  total_posts: number;
-  posts?: AutopostPost[];
+  status: 'running' | 'stopped' | 'error';
+  last_post: string;
+  next_post: string;
   created_at: string;
   updated_at: string;
 }
 
-export interface AutopostPost {
-  id: number;
-  message: string;
-  status: string;
-  created_at: string;
-}
+export const startAutopost = async (data: AutopostRequest): Promise<AutopostStatus> => {
+  const response = await api.post<AutopostStatus>('/start', data);
+  return response.data;
+};
 
-export async function startAutopost(data: AutopostRequest): Promise<AutopostStatus> {
-  const { data: response } = await api.post<AutopostStatus>('/start', data);
-  return response;
-}
+export const getAutopostStatus = async (): Promise<AutopostStatus> => {
+  const response = await api.get<AutopostStatus>('/status');
+  return response.data;
+};
 
-export async function getAutopostStatus(): Promise<AutopostStatus> {
-  const { data } = await api.get<AutopostStatus>('/status');
-  return data;
-}
-
-export async function stopAutopost(taskId: string): Promise<void> {
+export const stopAutopost = async (taskId: string): Promise<void> => {
   await api.post(`/stop/${taskId}`);
-} 
+}; 
