@@ -4,7 +4,6 @@ from routes.parser import parser_bp
 from routes.autopost import autopost_bp
 
 app = Quart(__name__)
-app.config['PROVIDE_AUTOMATIC_OPTIONS'] = True
 
 # Регистрируем blueprints
 app.register_blueprint(invite_bp, url_prefix='/api/invite')
