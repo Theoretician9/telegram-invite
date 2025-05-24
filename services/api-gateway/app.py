@@ -5,25 +5,15 @@ from routes.parser import parser_bp
 from routes.autopost import autopost_bp
 from config import Config
 
-def create_app():
-    # Создаем приложение с явным указанием всех параметров
-    app = Quart(
-        __name__,
-        static_folder='static',
-        template_folder='templates',
-        instance_relative_config=True
-    )
+def create_app(config_class=Config):
+    # Создаем приложение
+    app = Quart(__name__)
     
-    # Устанавливаем конфигурацию
+    # Загружаем конфигурацию
+    app.config.from_object(config_class)
+    
+    # Устанавливаем дополнительные настройки
     app.config.update(
-        SECRET_KEY=Config.SECRET_KEY,
-        SQLALCHEMY_DATABASE_URI=Config.SQLALCHEMY_DATABASE_URI,
-        SQLALCHEMY_TRACK_MODIFICATIONS=Config.SQLALCHEMY_TRACK_MODIFICATIONS,
-        REDIS_URL=Config.REDIS_URL,
-        CELERY_BROKER_URL=Config.CELERY_BROKER_URL,
-        CELERY_RESULT_BACKEND=Config.CELERY_RESULT_BACKEND,
-        TELEGRAM_API_ID=Config.TELEGRAM_API_ID,
-        TELEGRAM_API_HASH=Config.TELEGRAM_API_HASH,
         PROVIDE_AUTOMATIC_OPTIONS=False,
         JSON_AS_ASCII=False,
         JSONIFY_PRETTYPRINT_REGULAR=True,
@@ -37,6 +27,7 @@ def create_app():
     
     return app
 
+# Создаем экземпляр приложения
 app = create_app()
 
 if __name__ == '__main__':
