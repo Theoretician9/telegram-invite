@@ -1,6 +1,6 @@
 from celery import Celery
 import os
-from ..models.invite import InviteLog
+from services.api_gateway.models.invite import InviteLog
 
 celery = Celery('tasks', broker=os.getenv('CELERY_BROKER_URL', 'redis://redis:6379/0'))
 
