@@ -375,12 +375,23 @@ def analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_k
             resp = requests.post('https://api.openai.com/v1/chat/completions', 
                                headers=headers, json=data)
         else:
+            # Маппинг моделей Together.xyz
+            together_models = {
+                'deepseek-v3-0324': 'deepseek-ai/deepseek-coder-33b-instruct',
+                'llama-4-maverick': 'meta-llama/Llama-2-70b-chat-hf',
+                'llama-3.3-70b-turbo': 'meta-llama/Llama-2-70b-chat-hf'
+            }
+            
             headers = {
                 'Authorization': f'Bearer {together_api_key}',
                 'Content-Type': 'application/json'
             }
+            
+            # Получаем правильное имя модели
+            model_name = together_models.get(gpt_model, gpt_model)
+            
             data = {
-                'model': gpt_model,
+                'model': model_name,
                 'messages': [
                     {'role': 'system', 'content': analysis_prompt},
                     {'role': 'user', 'content': chunk}
@@ -388,8 +399,9 @@ def analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_k
                 'temperature': 0.7,
                 'max_tokens': 1000
             }
+            
             resp = requests.post('https://api.together.xyz/v1/chat/completions', 
-                               headers=headers, json=data)
+                               headers=headers, json=data, timeout=120)
         
         # Проверяем на ошибку превышения лимита запросов
         if resp.status_code == 429:
@@ -406,6 +418,7 @@ def analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_k
             time.sleep(60)  # Ждем минуту перед повторной попыткой
             return analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_key)
         logging.error(f"HTTP Error: {str(e)}")
+        logging.error(f"Request details: URL={e.response.url}, Status={e.response.status_code}, Response={e.response.text}")
         raise
     except Exception as e:
         logging.error(f"Error analyzing chunk: {str(e)}")
