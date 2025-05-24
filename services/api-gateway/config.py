@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-class Config:
+class BaseConfig:
     SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key")
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "mysql+pymysql://user:password@mysql:3306/telegram_invite")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
@@ -14,4 +14,7 @@ class Config:
     TELEGRAM_API_HASH = os.getenv("TELEGRAM_API_HASH")
     PROVIDE_AUTOMATIC_OPTIONS = True
     STATIC_FOLDER = 'static'
-    TEMPLATE_FOLDER = 'templates' 
+    TEMPLATE_FOLDER = 'templates'
+
+class Config(BaseConfig):
+    pass 
