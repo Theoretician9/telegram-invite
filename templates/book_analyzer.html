@@ -277,7 +277,17 @@ async function loadPrompts() {
         if (data.status === 'ok') {
             document.getElementById('analysis_prompt').value = data.analysis_prompt;
             document.getElementById('post_prompt').value = data.post_prompt;
-            if (data.gpt_model) document.getElementById('gpt_model').value = data.gpt_model;
+            if (data.gpt_model) {
+                const modelSelect = document.getElementById('gpt_model');
+                const modelValue = data.gpt_model;
+                // Проверяем, существует ли опция с таким значением
+                const optionExists = Array.from(modelSelect.options).some(opt => opt.value === modelValue);
+                if (optionExists) {
+                    modelSelect.value = modelValue;
+                } else {
+                    console.warn(`Model ${modelValue} not found in select options`);
+                }
+            }
             if (data.chat_id) document.getElementById('chat_id').value = data.chat_id;
         }
         // Загружаем ключи отдельно

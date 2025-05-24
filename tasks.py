@@ -391,29 +391,25 @@ def analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_k
             # Получаем правильное имя модели
             model_name = together_models.get(gpt_model, gpt_model)
             
-            # Формируем промпт в формате Together.xyz
-            prompt = f"""<s>[INST] <<SYS>>
-{analysis_prompt}
-<</SYS>>
-
-{chunk} [/INST]"""
-            
+            # Формируем данные для запроса
             data = {
                 'model': model_name,
-                'prompt': prompt,
+                'messages': [
+                    {'role': 'system', 'content': analysis_prompt},
+                    {'role': 'user', 'content': chunk}
+                ],
                 'temperature': 0.7,
                 'max_tokens': 1000,
                 'top_p': 0.7,
                 'top_k': 50,
-                'repetition_penalty': 1.1,
-                'stop': ['</s>', '[INST]']
+                'repetition_penalty': 1.1
             }
             
             logging.info(f"Sending request to Together.xyz with model: {model_name}")
             logging.info(f"Request data: {json.dumps(data, indent=2)}")
             
             try:
-                resp = requests.post('https://api.together.xyz/v1/completions', 
+                resp = requests.post('https://api.together.xyz/v1/chat/completions', 
                                    headers=headers, json=data, timeout=120)
                 
                 if not resp.ok:
@@ -429,7 +425,7 @@ def analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_k
                     return analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_key)
                 
                 result = resp.json()
-                return result['choices'][0]['text'].strip()
+                return result['choices'][0]['message']['content']
                 
             except requests.exceptions.RequestException as e:
                 logging.error(f"Request error: {str(e)}")
