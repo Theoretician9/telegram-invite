@@ -674,10 +674,22 @@ def generate_post_task(index_path, prompt, gpt_api_key, gpt_model=None, together
     # Загружаем индекс выжимок
     with open(index_path, 'r', encoding='utf-8') as f:
         summaries_index = json.load(f)
+    
+    # Проверяем, есть ли вообще выжимки
+    if not summaries_index:
+        raise Exception('Нет доступных выжимок для генерации поста.')
+    
     # Ищем первую неиспользованную выжимку
     summary_item = next((s for s in summaries_index if not s.get('used')), None)
     if not summary_item:
-        raise Exception('Нет неиспользованных выжимок для генерации поста.')
+        # Если все выжимки использованы, сбрасываем флаг used для всех
+        for s in summaries_index:
+            s['used'] = False
+        summary_item = summaries_index[0]
+        # Сохраняем обновленный индекс
+        with open(index_path, 'w', encoding='utf-8') as f:
+            json.dump(summaries_index, f, ensure_ascii=False, indent=2)
+    
     # Загружаем саму выжимку
     with open(summary_item['summary_path'], 'r', encoding='utf-8') as f:
         summary_data = json.load(f)
@@ -1088,4 +1100,22 @@ def reset_all_tasks():
         return True
     except Exception as e:
         logging.error(f"Error resetting tasks: {str(e)}")
+        return False
+
+@app.task
+def reset_used_summaries(index_path):
+    """Сбрасывает флаг used для всех выжимок в индексе."""
+    try:
+        with open(index_path, 'r', encoding='utf-8') as f:
+            summaries_index = json.load(f)
+        
+        for s in summaries_index:
+            s['used'] = False
+        
+        with open(index_path, 'w', encoding='utf-8') as f:
+            json.dump(summaries_index, f, ensure_ascii=False, indent=2)
+        
+        return True
+    except Exception as e:
+        logging.error(f"Error resetting used summaries: {str(e)}")
         return False

@@ -828,6 +828,25 @@ def reset_tasks():
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)})
 
+@app.route('/api/book_analyzer/reset_used', methods=['POST'])
+async def reset_used():
+    """Сбрасывает флаг used для всех выжимок в последнем индексе."""
+    try:
+        # Ищем последний индекс выжимок
+        analyses_dir = os.path.join(os.path.dirname(__file__), 'analyses')
+        index_files = sorted(glob.glob(os.path.join(analyses_dir, '*.summaries_index.json')), key=os.path.getmtime, reverse=True)
+        if not index_files:
+            return jsonify({'error': 'Нет проанализированных книг'}), 404
+        
+        index_path = index_files[0]
+        from tasks import reset_used_summaries
+        if reset_used_summaries(index_path):
+            return jsonify({'status': 'ok'})
+        else:
+            return jsonify({'error': 'Ошибка при сбросе флагов'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     import hypercorn.asyncio
     import hypercorn.config
