@@ -7,7 +7,7 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 RUN mkdir -p /var/log/nginx
 
 # Открываем порты
-EXPOSE 80
+EXPOSE 8080
 EXPOSE 443
 
 # Запускаем Nginx
