@@ -4,6 +4,8 @@ from routes.invite import invite_bp
 from routes.parser import parser_bp
 from routes.autopost import autopost_bp
 from config import Config
+import aioredis
+from flask_session import Session
 
 def create_app(config_class=Config):
     # Создаем приложение с минимальной конфигурацией
@@ -18,6 +20,10 @@ def create_app(config_class=Config):
     
     # Устанавливаем дополнительные настройки
     app.config['PROVIDE_AUTOMATIC_OPTIONS'] = False
+    app.config['SESSION_TYPE'] = 'redis'
+    app.config['SESSION_REDIS'] = aioredis.from_url(BROKER_URL)
+    app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 МБ
+    Session(app)
     
     # Регистрируем blueprints
     app.register_blueprint(invite_bp, url_prefix='/api/invite')
