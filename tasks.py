@@ -566,8 +566,8 @@ def split_text_into_semantic_blocks(text, min_block_size=500, max_block_size=400
     
     return semantic_blocks
 
-@app.task
-def analyze_book_task(book_path, additional_prompt, gpt_api_key, gpt_model='gpt-3.5-turbo-1106', together_api_key=None):
+@app.task(bind=True)
+def analyze_book_task(self, book_path, additional_prompt, gpt_api_key, gpt_model='gpt-3.5-turbo-1106', together_api_key=None):
     with open('book_analyzer_config.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
     analysis_prompt = config['analysis_prompt']
@@ -608,6 +608,12 @@ def analyze_book_task(book_path, additional_prompt, gpt_api_key, gpt_model='gpt-
     
     try:
         for i, block in enumerate(blocks):
+            # Проверяем флаг остановки
+            if redis_client.get(f'analyze_stop:{self.request.id}'):
+                logging.info(f"Analysis stopped by user request (task_id: {self.request.id})")
+                redis_client.hmset(status_key, {"status": "stopped", "progress": len(summaries_index), "total": len(blocks) + len(summaries_index)})
+                return
+            
             chunk = block['text']
             title = block['title']
             analysis = analyze_chunk(chunk, gpt_api_key, analysis_prompt, gpt_model, together_api_key)
@@ -1057,3 +1063,28 @@ def autopost_task(self, schedule, telegram_bot_token, chat_id, index_path, gpt_a
         asyncio.run(autopost_loop())
     finally:
         db.close()
+
+@app.route('/reset_tasks', methods=['POST'])
+def reset_tasks():
+    try:
+        # Получаем все ключи статусов анализа
+        analyze_keys = redis_client.keys('analyze_status:*')
+        for key in analyze_keys:
+            # Устанавливаем флаг остановки для всех текущих задач анализа
+            task_id = key.decode('utf-8').split(':')[1]
+            redis_client.set(f'analyze_stop:{task_id}', '1')
+            # Обновляем статус на "stopped"
+            redis_client.hmset(key, {"status": "stopped"})
+        
+        # Очищаем все ключи автопостинга
+        autopost_keys = redis_client.keys('autopost_stop:*')
+        for key in autopost_keys:
+            redis_client.set(key, '1')
+        
+        # Очищаем все ключи статусов
+        redis_client.delete(*analyze_keys)
+        redis_client.delete(*autopost_keys)
+        
+        return jsonify({"status": "success"})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)})
