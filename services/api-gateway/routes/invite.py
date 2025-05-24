@@ -1,5 +1,5 @@
 from quart import Blueprint, request, jsonify
-from ..tasks.invite import process_invite
+from services.api_gateway.tasks.invite import process_invite
 
 invite_bp = Blueprint('invite', __name__)
 
