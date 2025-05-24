@@ -1,6 +1,6 @@
 from celery import Celery
 import os
-from services.api_gateway.models.invite import InviteLog
+from ..models.invite import InviteLog
 
 celery = Celery('tasks')
 celery.config_from_object('celeryconfig')
