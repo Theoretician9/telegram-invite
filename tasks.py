@@ -694,6 +694,21 @@ def generate_post_task(index_path, prompt, gpt_api_key, gpt_model=None, together
     return post
 
 
+def clean_markdown_text(text):
+    """Очищает текст от проблемных символов форматирования Markdown."""
+    # Заменяем множественные звездочки на одинарные
+    text = re.sub(r'\*{3,}', '*', text)
+    # Заменяем множественные подчеркивания на одинарные
+    text = re.sub(r'_{3,}', '_', text)
+    # Удаляем непарные звездочки и подчеркивания
+    text = re.sub(r'(?<!\*)\*(?!\*)', '', text)
+    text = re.sub(r'(?<!_)_(?!_)', '', text)
+    # Заменяем множественные переносы строк на двойные
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    # Удаляем пробелы в начале и конце строк
+    text = '\n'.join(line.strip() for line in text.split('\n'))
+    return text
+
 @app.task
 def publish_post_task(post_id, telegram_bot_token, chat_id, force=False):
     import asyncio
@@ -725,6 +740,9 @@ def publish_post_task(post_id, telegram_bot_token, chat_id, force=False):
                     logging.error(f"[TG] Ошибка доступа к чату: {str(chat_error)}")
                     raise
                 
+                # Очищаем текст от проблемных символов форматирования
+                cleaned_content = clean_markdown_text(post.content)
+                
                 # Пробуем отправить тестовое сообщение
                 try:
                     test_msg = await bot.send_message(
@@ -739,17 +757,32 @@ def publish_post_task(post_id, telegram_bot_token, chat_id, force=False):
                     raise
                 
                 # Отправляем основной пост
-                result = await bot.send_message(
-                    chat_id=chat_id,
-                    text=post.content,
-                    parse_mode='Markdown',
-                    disable_web_page_preview=True
-                )
-                logging.info(f"[TG] Успешно опубликовано: message_id={result.message_id}")
-                post.published = True
-                post.published_at = datetime.utcnow()
-                db.commit()
-                redis_client.delete(f'publish_error:{post_id}')
+                try:
+                    result = await bot.send_message(
+                        chat_id=chat_id,
+                        text=cleaned_content,
+                        parse_mode='Markdown',
+                        disable_web_page_preview=True
+                    )
+                    logging.info(f"[TG] Успешно опубликовано: message_id={result.message_id}")
+                    post.published = True
+                    post.published_at = datetime.utcnow()
+                    db.commit()
+                    redis_client.delete(f'publish_error:{post_id}')
+                except Exception as e:
+                    # Если не удалось отправить с Markdown, пробуем без форматирования
+                    logging.warning(f"[TG] Ошибка при отправке с Markdown, пробуем без форматирования: {str(e)}")
+                    result = await bot.send_message(
+                        chat_id=chat_id,
+                        text=cleaned_content,
+                        parse_mode=None,
+                        disable_web_page_preview=True
+                    )
+                    logging.info(f"[TG] Успешно опубликовано без форматирования: message_id={result.message_id}")
+                    post.published = True
+                    post.published_at = datetime.utcnow()
+                    db.commit()
+                    redis_client.delete(f'publish_error:{post_id}')
             except Exception as e:
                 error_msg = str(e)
                 logging.error(f"[TG] Ошибка публикации поста {post_id} в Telegram: {error_msg}")
