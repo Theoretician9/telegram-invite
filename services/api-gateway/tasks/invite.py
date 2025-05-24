@@ -2,7 +2,7 @@ from celery import Celery
 from models.invite import InviteLog
 
 # Настройка Celery
-celery = Celery('tasks', broker='redis://redis:6379/0')
+celery = Celery('tasks', broker='redis://redis:6379/0', backend='redis://redis:6379/0')
 
 @celery.task
 def process_invite(target, message=None):
