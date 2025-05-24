@@ -3,7 +3,14 @@ from routes.invite import invite_bp
 from routes.parser import parser_bp
 from routes.autopost import autopost_bp
 
-app = Quart(__name__)
+# Создаем приложение с конфигурацией
+app = Quart(__name__, 
+    static_folder='static',
+    template_folder='templates'
+)
+app.config.update(
+    PROVIDE_AUTOMATIC_OPTIONS=True
+)
 
 # Регистрируем blueprints
 app.register_blueprint(invite_bp, url_prefix='/api/invite')
