@@ -30,6 +30,8 @@ class Config:
     
     @classmethod
     def init_app(cls, app):
-        app.config['PROVIDE_AUTOMATIC_OPTIONS'] = False
+        # Убедимся, что PROVIDE_AUTOMATIC_OPTIONS установлен
+        if 'PROVIDE_AUTOMATIC_OPTIONS' not in app.config:
+            app.config['PROVIDE_AUTOMATIC_OPTIONS'] = False
 
     # ... (rest of the original file content remains unchanged) 
