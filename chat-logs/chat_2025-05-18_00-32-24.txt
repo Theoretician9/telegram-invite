@@ -1,1 +1,0 @@
-ssh -i ~/.ssh/id_rsa_webdock admin@92.113.146.148
